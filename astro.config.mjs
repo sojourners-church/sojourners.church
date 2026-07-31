@@ -4,7 +4,11 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, envField, fontProviders } from 'astro/config';
 import icon from 'astro-icon';
 
-import { getConfigFile, getFeature, requireEnv } from './src/lib/verifyEnvVars';
+import {
+	getConfigFile,
+	navigationFeatureIsActive,
+	requireEnv,
+} from './src/lib/verifyEnvVars';
 
 // If feature is active, verify Env variables set
 if (getConfigFile('footer').subscribe?.isActive) {
@@ -12,7 +16,7 @@ if (getConfigFile('footer').subscribe?.isActive) {
 	requireEnv('RESEND_SEGMENT_ID');
 }
 
-if (getFeature('calendar')) {
+if (navigationFeatureIsActive('calendar')) {
 	requireEnv('PUBLIC_GOOGLE_CALENDAR_API_KEY');
 	requireEnv('PUBLIC_GOOGLE_CALENDAR_ID');
 }

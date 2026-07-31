@@ -1,7 +1,7 @@
 import type { InferEntrySchema } from 'astro:content';
 
 export type NavigationEntry =
-	InferEntrySchema<'nav'>['navigationEntries'][number];
+	InferEntrySchema<'config:nav'>['navigationEntries'][number];
 
 export type NavigationPageEntry = Extract<
 	NavigationEntry,

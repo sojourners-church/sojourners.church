@@ -1,8 +1,11 @@
 export { getBlog, getTags } from './getBlog';
-export { type ConfigCollection, type ConfigName, getConfig } from './getConfig';
+export {
+	type ConfigCollection,
+	type ConfigFileName,
+	getConfig,
+} from './getConfig';
 export {
 	getFeatureNavigationEntry,
-	getNavigation,
 	getPageNavigationEntries,
 } from './getNavigation';
 export { getPreachers } from './getPreachers';

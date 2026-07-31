@@ -69,6 +69,67 @@ collections:
                 label: Show In Footer
                 widget: boolean
                 default: true
+      - name: navigation
+        label: Navigation
+        file: src/content/config/navigation.yaml
+        fields:
+          - name: navigationEntries
+            label: Navigation Entries
+            label_singular: Navigation Entry
+            widget: list
+            typeKey: navigationEntryType
+            types:
+              - &type_page
+                name: page
+                label: Page
+                fields:
+                  - &navigation_label
+                    name: label
+                    label: Label
+                    widget: string
+                  - name: page
+                    label: Page
+                    widget: relation
+                    collection: pages
+              - &type_feature
+                name: feature
+                label: Feature
+                fields:
+                  - *navigation_label
+                  - name: featureType
+                    label: Type
+                    widget: select
+                    options:
+                      - { label: Sermon, value: "sermons" }
+                      - { label: Blog, value: "blog" }
+                      - { label: Calendar, value: "calendar" }
+                      - { label: Team, value: "team" }
+                  - name: customSlug
+                    label: Custom URL Slug
+                    comment: Custom URL will be slugified. Leave blank for default URL.
+                    widget: string
+                    required: false
+              - &type_external
+                name: external
+                label: External Link
+                fields:
+                  - *navigation_label
+                  - name: url
+                    label: URL
+                    widget: string
+                    type: url
+              - name: group
+                label: Group
+                fields:
+                  - *navigation_label
+                  - name: children
+                    label: Children
+                    widget: list
+                    typeKey: navigationEntryType
+                    types:
+                      - *type_page
+                      - *type_feature
+                      - *type_external
       - name: homepage
         label: Homepage
         file: src/content/config/homepage.yaml

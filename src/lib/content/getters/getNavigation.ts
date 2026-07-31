@@ -1,25 +1,13 @@
-import { type CollectionEntry, getEntry } from 'astro:content';
-
 import type { NavigationFeatureEntry } from '#/lib/content/types/navigation';
 
-export const getNavigation = async (
-	id: string,
-): Promise<CollectionEntry<'nav'>['data']['navigationEntries']> => {
-	const res = await getEntry('nav', id);
-
-	if (!res) {
-		throw new Error(`Missing required entry "${String(id)}" in "nav".`);
-	}
-
-	return res.data.navigationEntries;
-};
+import { getConfig } from './getConfig';
 
 export const getPageNavigationEntries = async () => {
-	const entries = await getNavigation('primary');
+	const { navigationEntries } = await getConfig('navigation');
 
 	const pageEntries = [];
 
-	for (const entry of entries) {
+	for (const entry of navigationEntries) {
 		if (entry.navigationEntryType === 'page') pageEntries.push(entry);
 
 		if (entry.navigationEntryType === 'group') {
@@ -37,9 +25,9 @@ export const getFeatureNavigationEntry = async <
 >(
 	type: T,
 ): Promise<NavigationFeatureEntry | undefined> => {
-	const entries = await getNavigation('primary');
+	const { navigationEntries } = await getConfig('navigation');
 
-	for (const entry of entries) {
+	for (const entry of navigationEntries) {
 		if (entry.navigationEntryType === 'feature' && entry.featureType === type)
 			return entry;
 

@@ -1,7 +1,7 @@
 ---
 import { Image } from 'astro:assets';
 
-import { getConfig, getNavigation } from '#/lib/content/getters';
+import { getConfig } from '#/lib/content/getters';
 import { getImage } from '#/lib/getImage';
 
 import { DesktopNav, MobileNav } from './nav';
@@ -10,10 +10,9 @@ const config = await getConfig('site');
 
 const logo = getImage(config.churchLogo?.image);
 
-const primaryNav = await getNavigation('primary');
+const { navigationEntries } = await getConfig('navigation');
 ---
 
-<!-- TODO: Consider dynamic height — but have to account for in full-page home layout -->
 <header
 	class:list={["layout-full py-margins-tight", Astro.url.pathname === "/" ? "absolute inset-x-0 top-0 z-40 bg-background" : "relative"]}
 >
@@ -34,7 +33,7 @@ const primaryNav = await getNavigation('primary');
         />
 		)}
 		</div>
-		<DesktopNav navigationEntries={primaryNav} class="max-lg:hidden" />
-		<MobileNav navigationEntries={primaryNav} class="lg:hidden" />
+		<DesktopNav {navigationEntries} class="max-lg:hidden" />
+		<MobileNav {navigationEntries} class="lg:hidden" />
 	</div>
 </header>

@@ -6,8 +6,8 @@ import path from 'node:path';
 import type { CollectionEntry } from 'astro:content';
 import { parse } from 'yaml';
 
-import type { ConfigCollection, ConfigName } from '#/lib/content/getters';
-import type { NavigationFeatureEntry } from '#/lib/content/types/navigation';
+import type { ConfigCollection, ConfigFileName } from './content/getters';
+import type { NavigationFeatureEntry } from './content/types/navigation';
 
 export const requireEnv = (name: string) => {
 	if (!process.env[name]) {
@@ -15,31 +15,26 @@ export const requireEnv = (name: string) => {
 	}
 };
 
-// Getters
-export const getConfigFile = <C extends ConfigName>(
-	id: C,
+export const getConfigFile = <C extends ConfigFileName>(
+	filename: C,
 ): CollectionEntry<ConfigCollection<C>>['data'] => {
-	const siteConfigPath = path.resolve(`src/content/config/${id}.yaml`);
+	const siteConfigPath = path.resolve(`src/content/config/${filename}.yaml`);
 
 	const siteConfig = parse(fs.readFileSync(siteConfigPath, 'utf-8'));
 
 	return siteConfig;
 };
 
-export const getFeature = <T extends NavigationFeatureEntry['featureType']>(
+export const navigationFeatureIsActive = <
+	T extends NavigationFeatureEntry['featureType'],
+>(
 	type: T,
-): NavigationFeatureEntry | undefined => {
-	const navigationEntriesPath = path.resolve(
-		'src/content/navigation/primary.yaml',
-	);
-
-	const { navigationEntries } = parse(
-		fs.readFileSync(navigationEntriesPath, 'utf-8'),
-	);
+): boolean => {
+	const { navigationEntries } = getConfigFile('navigation');
 
 	for (const entry of navigationEntries) {
 		if (entry.navigationEntryType === 'feature' && entry.featureType === type)
-			return entry;
+			return true;
 
 		if (entry.navigationEntryType === 'group') {
 			for (const child of entry.children) {
@@ -47,10 +42,10 @@ export const getFeature = <T extends NavigationFeatureEntry['featureType']>(
 					child.navigationEntryType === 'feature' &&
 					child.featureType === type
 				)
-					return child;
+					return true;
 			}
 		}
 	}
 
-	return undefined;
+	return false;
 };

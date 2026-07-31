@@ -41,8 +41,8 @@ const configTheme = defineCollection({
 	schema: ConfigThemeSchema,
 });
 
-const navigationCollection = defineCollection({
-	loader: glob({ pattern: '**/*.yaml', base: './src/content/navigation' }),
+const configNavigation = defineCollection({
+	loader: glob({ pattern: 'navigation.yaml', base: './src/content/config' }),
 	schema: NavigationEntrySchema,
 });
 
@@ -85,7 +85,7 @@ export const collections = {
 	'config:footer': configFooter,
 	'config:team': configTeam,
 	'config:theme': configTheme,
-	nav: navigationCollection,
+	'config:nav': configNavigation,
 	pages: pagesCollection,
 	preachers: preacherCollection,
 	team: teamCollection,
