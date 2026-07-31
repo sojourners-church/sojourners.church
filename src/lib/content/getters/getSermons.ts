@@ -1,6 +1,6 @@
 import { getCollection, getEntry } from 'astro:content';
 
-import type { HydratedSermon } from '#/content/types/sermons';
+import type { HydratedSermon } from '#/lib/content/types/sermons';
 
 export const getSermons = async (): Promise<HydratedSermon[]> => {
 	const allSermons = (await getCollection('sermons')).sort(

@@ -3,8 +3,8 @@ import { CircleX } from '@lucide/astro';
 import { format } from 'date-fns';
 
 import { Skeleton } from '#/components/ui/skeleton';
-import { getConfig } from '#/content/getters';
-import type { HydratedSermon } from '#/content/types/sermons';
+import { getConfig } from '#/lib/content/getters';
+import type { HydratedSermon } from '#/lib/content/types/sermons';
 
 import { parseEmbed } from './parser';
 import { providers } from './providers';

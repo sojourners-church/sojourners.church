@@ -1,5 +1,5 @@
 export { getBlog, getTags } from './getBlog';
-export { getConfig } from './getConfig';
+export { type ConfigCollection, type ConfigName, getConfig } from './getConfig';
 export {
 	getFeatureNavigationEntry,
 	getNavigation,

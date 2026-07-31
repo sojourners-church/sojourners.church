@@ -10,13 +10,13 @@ import {
 	Search,
 } from '#/components/filters';
 import { Meta } from '#/components/meta';
+import { MainLayout } from '#/layouts';
 import {
 	getFeatureNavigationEntry,
 	getPreachers,
 	getSeries,
 	getSermons,
-} from '#/content/getters';
-import { MainLayout } from '#/layouts';
+} from '#/lib/content/getters';
 
 export const getStaticPaths = (async () => {
 	const sermonNavigationEntry = await getFeatureNavigationEntry('sermons');

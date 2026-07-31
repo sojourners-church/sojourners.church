@@ -2,8 +2,8 @@
 import type { GetStaticPaths } from 'astro';
 
 import { Calendar } from '#/components/calendar';
-import { getFeatureNavigationEntry } from '#/content/getters';
 import { MainLayout } from '#/layouts';
+import { getFeatureNavigationEntry } from '#/lib/content/getters';
 
 export const getStaticPaths = (async () => {
 	const calendarNavigationEntry = await getFeatureNavigationEntry('calendar');

@@ -3,8 +3,8 @@ import { getEntries } from 'astro:content';
 import type { GetStaticPaths } from 'astro';
 
 import { TeamCard } from '#/components/card';
-import { getConfig, getFeatureNavigationEntry } from '#/content/getters';
 import { MainLayout } from '#/layouts';
+import { getConfig, getFeatureNavigationEntry } from '#/lib/content/getters';
 
 export const getStaticPaths = (async () => {
 	const teamNavigationEntry = await getFeatureNavigationEntry('team');

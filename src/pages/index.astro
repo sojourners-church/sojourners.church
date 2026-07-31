@@ -2,8 +2,8 @@
 import { Image } from 'astro:assets';
 
 import { Button } from '#/components/ui/button';
-import { getConfig } from '#/content/getters';
 import { BaseLayout } from '#/layouts';
+import { getConfig } from '#/lib/content/getters';
 import { getImage } from '#/lib/getImage';
 
 const siteConfig = await getConfig('site');

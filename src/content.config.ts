@@ -2,19 +2,19 @@ import { defineCollection } from 'astro:content';
 import { glob } from 'astro/loaders';
 import { z } from 'astro/zod';
 
-import { BlogSchema } from './content/schemas/blog';
+import { BlogSchema } from './lib/content/schemas/blog';
 import {
 	ConfigFooterSchema,
 	ConfigHomepageSchema,
 	ConfigSiteSchema,
 	ConfigTeamSchema,
 	ConfigThemeSchema,
-} from './content/schemas/config';
-import { NavigationEntrySchema } from './content/schemas/navigation';
-import { PreacherSchema } from './content/schemas/preacher';
-import { SeriesSchema } from './content/schemas/series';
-import { SermonSchema } from './content/schemas/sermon';
-import { TeamSchema } from './content/schemas/team';
+} from './lib/content/schemas/config';
+import { NavigationEntrySchema } from './lib/content/schemas/navigation';
+import { PreacherSchema } from './lib/content/schemas/preacher';
+import { SeriesSchema } from './lib/content/schemas/series';
+import { SermonSchema } from './lib/content/schemas/sermon';
+import { TeamSchema } from './lib/content/schemas/team';
 
 const configSite = defineCollection({
 	loader: glob({ pattern: 'site.yaml', base: './src/content/config' }),

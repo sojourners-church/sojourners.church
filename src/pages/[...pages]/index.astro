@@ -2,8 +2,8 @@
 import { getEntry, render } from 'astro:content';
 import type { GetStaticPaths } from 'astro';
 
-import { getPageNavigationEntries } from '#/content/getters';
 import { MainLayout } from '#/layouts';
+import { getPageNavigationEntries } from '#/lib/content/getters';
 
 export const getStaticPaths = (async () => {
 	const pageNavigationEntries = await getPageNavigationEntries();

@@ -1,6 +1,6 @@
 import { type CollectionEntry, getEntry } from 'astro:content';
 
-import type { NavigationFeatureEntry } from '#/content/types/navigation';
+import type { NavigationFeatureEntry } from '#/lib/content/types/navigation';
 
 export const getNavigation = async (
 	id: string,

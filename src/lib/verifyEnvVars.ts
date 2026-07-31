@@ -6,8 +6,8 @@ import path from 'node:path';
 import type { CollectionEntry } from 'astro:content';
 import { parse } from 'yaml';
 
-import type { ConfigCollection, ConfigName } from '#/content/getters/getConfig';
-import type { NavigationFeatureEntry } from '#/content/types/navigation';
+import type { ConfigCollection, ConfigName } from '#/lib/content/getters';
+import type { NavigationFeatureEntry } from '#/lib/content/types/navigation';
 
 export const requireEnv = (name: string) => {
 	if (!process.env[name]) {

@@ -3,8 +3,8 @@ import { render } from 'astro:content';
 import type { GetStaticPaths } from 'astro';
 
 import { Meta } from '#/components/meta';
-import { getBlog, getFeatureNavigationEntry } from '#/content/getters';
 import { MainLayout } from '#/layouts';
+import { getBlog, getFeatureNavigationEntry } from '#/lib/content/getters';
 
 export const getStaticPaths = (async () => {
 	const navigationEntry = await getFeatureNavigationEntry('blog');

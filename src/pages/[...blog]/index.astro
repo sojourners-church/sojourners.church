@@ -8,8 +8,8 @@ import {
 	FiltersWrapper,
 	Search,
 } from '#/components/filters';
-import { getBlog, getFeatureNavigationEntry } from '#/content/getters';
 import { MainLayout } from '#/layouts';
+import { getBlog, getFeatureNavigationEntry } from '#/lib/content/getters';
 
 export const getStaticPaths = (async () => {
 	const blogNavigationEntry = await getFeatureNavigationEntry('blog');
