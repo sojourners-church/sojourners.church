@@ -5,6 +5,8 @@ churchDescription: Astro theme for churches.
 churchLogo:
   image: /src/assets/site/logoipsum-379.svg
   showInHeader: true
+favicon: /favicon.svg
+icon: /favicon.ico
 socials:
   - name: Youtube
     icon: youtube

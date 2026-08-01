@@ -15,7 +15,7 @@ const { pageTitle } = Astro.props;
 
 const config = await getConfig('site');
 
-const siteName = config.churchName.name ?? 'Church Website';
+const siteName = config.churchName.name;
 const metaTitle = pageTitle ? `${pageTitle} | ${siteName}` : siteName;
 ---
 
@@ -23,14 +23,17 @@ const metaTitle = pageTitle ? `${pageTitle} | ${siteName}` : siteName;
 <html lang="en">
 	<head>
 		<!-- bejamas:astro-fonts:start -->
-		<Font cssVariable="--font-sans" />
+		<Font cssVariable="--font-sans" preload />
 		<!-- bejamas:astro-fonts:end -->
 
 		<meta charset="UTF-8">
 		<meta name="viewport" content="width=device-width">
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg">
-		<link rel="icon" href="/favicon.ico">
+		{config.favicon && <link rel="icon" type="image/svg+xml" href={config.favicon}/>}
+		{config.icon && <link rel="icon" href={config.icon} />}
+
 		<meta name="generator" content={Astro.generator}>
+		<meta name="description" content={config.churchDescription}>
+		<link rel="sitemap" href="/sitemap-index.xml">
 
 		<!-- TITLE -->
 		<title>{metaTitle}</title>

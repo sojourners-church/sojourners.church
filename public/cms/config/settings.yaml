@@ -43,6 +43,20 @@ singletons:
             label: Show In Header
             widget: boolean
             default: true
+      - name: favicon
+        label: Favicon
+        widget: image
+        media_folder: "/public"
+        public_folder: "/"
+        accept: "image/svg"
+        required: false
+      - name: icon
+        label: Icon
+        widget: image
+        media_folder: "/public"
+        public_folder: "/"
+        accept: "image/ico"
+        required: false
       - name: socials
         label: Social Media
         widget: list

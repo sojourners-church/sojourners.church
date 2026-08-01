@@ -18,6 +18,8 @@ export const ConfigSiteSchema = z.object({
 			showInHeader: z.boolean().default(true),
 		})
 		.optional(),
+	favicon: z.string().optional(),
+	icon: z.string().optional(),
 	socials: z
 		.array(
 			z.object({
