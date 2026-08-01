@@ -20,6 +20,7 @@
 	"dependencies": {
 		"@astrojs/check": "^0.9.9",
 		"@astrojs/netlify": "^8.1.2",
+		"@astrojs/sitemap": "^3.7.3",
 		"@changesets/cli": "^2.31.1",
 		"@data-slot/combobox": "^0.2.166",
 		"@data-slot/navigation-menu": "^0.2.166",

@@ -1,5 +1,6 @@
 // @ts-check
 import netlify from '@astrojs/netlify';
+import sitemap from '@astrojs/sitemap';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, envField, fontProviders } from 'astro/config';
 import icon from 'astro-icon';
@@ -69,7 +70,7 @@ export default defineConfig({
 		plugins: [tailwindcss()],
 	},
 
-	integrations: [icon()],
+	integrations: [icon(), sitemap()],
 
 	// image: {
 	//   layout: 'constrained',
