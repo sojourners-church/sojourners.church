@@ -1,5 +1,5 @@
 ---
-title: Sundays
+title: Page Theme Example
 ---
 
 # H1 Heading

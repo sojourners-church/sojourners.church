@@ -3,21 +3,20 @@ navigationEntries:
     label: About Us
     children:
       - navigationEntryType: page
+        label: Page Theme Example
+        page: page-theme-example
+      - navigationEntryType: page
         label: What We Believe
         page: what-we-believe
       - navigationEntryType: feature
         label: Leadership
         featureType: team
-        customSlug: ''
       - navigationEntryType: page
         label: Partnerships
         page: partnerships
   - navigationEntryType: group
     label: Life Together
     children:
-      - navigationEntryType: page
-        label: Sundays
-        page: sundays
       - navigationEntryType: page
         label: Community Rhythms
         page: community-rhythms
@@ -27,11 +26,9 @@ navigationEntries:
       - navigationEntryType: feature
         label: Calendar
         featureType: calendar
-        customSlug: ''
   - navigationEntryType: feature
     label: Sermons
     featureType: sermons
-    customSlug: ''
   - navigationEntryType: feature
     label: Writings
     featureType: blog

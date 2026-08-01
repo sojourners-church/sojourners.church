@@ -2,9 +2,9 @@
 firstName: Charlie
 lastName: Olson
 fullName: Charlie Olson
+position: Elder
 isGuest: false
 sortPriority: 2
-image: ''
 ---
 
-Elder at Sojourners Church.
+Charlie is an elder at Sojourners Church.

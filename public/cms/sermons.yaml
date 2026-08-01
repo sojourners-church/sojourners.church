@@ -2,6 +2,7 @@ collections:
   - name: sermons
     label: Sermons
     label_singular: Sermon
+    icon: mic
     folder: src/content/sermons
     media_folder: "{{media_folder}}/sermons"
     slug: "{{fields.date}}-{{fields.title}}"
@@ -32,7 +33,7 @@ collections:
       - name: preacher
         label: Preacher
         widget: relation
-        collection: preachers
+        collection: people
         display_fields: [fullName]
         search_fields: [fullName]
       - name: mediaURL

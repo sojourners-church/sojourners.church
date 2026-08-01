@@ -1,6 +1,7 @@
 collections:
   - name: series
     label: Sermon Series
+    icon: list
     folder: src/content/series
     media_folder: "{{media_folder}}/series"
     slug: "{{fields.title}}"

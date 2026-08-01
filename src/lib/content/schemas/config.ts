@@ -69,7 +69,7 @@ export const ConfigTeamSchema = z.object({
 			z.object({
 				name: z.string(),
 				description: z.string().optional(),
-				entries: z.array(reference('team')),
+				entries: z.array(reference('people')),
 			}),
 		)
 		.optional(),

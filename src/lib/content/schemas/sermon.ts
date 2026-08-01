@@ -36,7 +36,7 @@ export const SermonSchema = z.object({
 
 			return ctx.issues.length ? z.NEVER : results;
 		}),
-	preacher: reference('preachers'),
+	preacher: reference('people'),
 	mediaURL: z.string().optional(),
 	bulletinURL: z.string().optional(),
 });

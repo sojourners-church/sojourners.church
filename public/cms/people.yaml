@@ -1,8 +1,9 @@
 collections:
-  - name: team
-    label: Team
-    folder: src/content/team
-    media_folder: "{{media_folder}}/team"
+  - name: people
+    label: People
+    icon: person
+    folder: src/content/people
+    media_folder: "{{media_folder}}/people"
     slug: "{{fields.fullName}}"
     summary: "{{fullName}}"
     fields:
@@ -29,7 +30,18 @@ collections:
         widget: string
         type: email
         required: false
+      - name: isGuest
+        label: Guest Preacher
+        widget: boolean
+        default: false
+        required: false
+      - name: sortPriority
+        label: Sort Priority
+        widget: number
+        default: 0
+        required: false
       - name: body
         label: Bio
         widget: markdown
         required: false
+  - divider: true

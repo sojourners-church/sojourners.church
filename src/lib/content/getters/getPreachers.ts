@@ -1,7 +1,13 @@
-import { getCollection } from 'astro:content';
+import { getSermons } from './getSermons';
 
 export const getPreachers = async () => {
-	return (await getCollection('preachers')).sort((a, b) => {
+	const allSermons = await getSermons();
+
+	return [
+		...new Map(
+			allSermons.map((sermon) => [sermon.preacher.id, sermon.preacher]),
+		).values(),
+	].sort((a, b) => {
 		const aPriority = a.data.sortPriority || Number.POSITIVE_INFINITY;
 		const bPriority = b.data.sortPriority || Number.POSITIVE_INFINITY;
 

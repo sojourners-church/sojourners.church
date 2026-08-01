@@ -1,7 +1,8 @@
 collections:
   - name: blog
-    label: Blog
+    label: Blog Entries
     folder: src/content/blog
+    icon: rss_feed
     media_folder: "{{media_folder}}/blog"
     slug: "{{fields.date}}-{{fields.title}}"
     fields:
@@ -16,7 +17,7 @@ collections:
       - name: tags
         label: Post Tags
         widget: relation
-        collection: config
+        collection: _singletons
         file: blog
         multiple: true
         value_field: "{{tags.*.tag}}"

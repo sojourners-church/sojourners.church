@@ -11,10 +11,9 @@ import {
 	ConfigThemeSchema,
 } from './lib/content/schemas/config';
 import { NavigationEntrySchema } from './lib/content/schemas/navigation';
-import { PreacherSchema } from './lib/content/schemas/preacher';
+import { PeopleSchema } from './lib/content/schemas/people';
 import { SeriesSchema } from './lib/content/schemas/series';
 import { SermonSchema } from './lib/content/schemas/sermon';
-import { TeamSchema } from './lib/content/schemas/team';
 
 const configSite = defineCollection({
 	loader: glob({ pattern: 'site.yaml', base: './src/content/config' }),
@@ -54,14 +53,9 @@ const pagesCollection = defineCollection({
 	}),
 });
 
-const preacherCollection = defineCollection({
-	loader: glob({ pattern: '**/*.md', base: './src/content/preachers' }),
-	schema: PreacherSchema,
-});
-
-const teamCollection = defineCollection({
-	loader: glob({ pattern: '**/*.md', base: './src/content/team' }),
-	schema: TeamSchema,
+const peopleCollection = defineCollection({
+	loader: glob({ pattern: '**/*.md', base: './src/content/people' }),
+	schema: PeopleSchema,
 });
 
 const seriesCollection = defineCollection({
@@ -87,8 +81,7 @@ export const collections = {
 	'config:theme': configTheme,
 	'config:nav': configNavigation,
 	pages: pagesCollection,
-	preachers: preacherCollection,
-	team: teamCollection,
+	people: peopleCollection,
 	series: seriesCollection,
 	sermons: sermonCollection,
 	blog: blogCollection,

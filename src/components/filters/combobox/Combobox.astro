@@ -14,7 +14,7 @@ import { getTags } from '#/lib/content/getters';
 
 type Option =
 	| CollectionEntry<'series'>
-	| CollectionEntry<'preachers'>
+	| CollectionEntry<'people'>
 	| CollectionEntry<'blog'>;
 
 interface Props {
@@ -25,7 +25,7 @@ const { options } = Astro.props;
 
 const typeMap: Record<Option['collection'], 'preacher' | 'series' | 'blog'> = {
 	series: 'series',
-	preachers: 'preacher',
+	people: 'preacher',
 	blog: 'blog',
 } as const;
 
@@ -60,7 +60,7 @@ const allTags = type === 'blog' ? await getTags() : [];
 					))
 					: options.map((entry) => (
 				    <ComboboxItem value={entry.id}>
-  					{entry.collection === 'preachers' && `${entry.data.firstName} ${entry.data.lastName}`}
+  					{entry.collection === 'people' && `${entry.data.firstName} ${entry.data.lastName}`}
   					{entry.collection === 'series' && entry.data.title}
   				</ComboboxItem>
   			))}

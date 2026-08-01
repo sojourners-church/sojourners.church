@@ -2,6 +2,7 @@ collections:
   - name: pages
     label: Pages
     label_singular: Page
+    icon: article
     folder: src/content/pages
     media_folder: "{{media_folder}}/pages"
     fields:
@@ -11,3 +12,4 @@ collections:
       - name: body
         label: Body
         widget: markdown
+  - divider: true
