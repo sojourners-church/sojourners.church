@@ -1,6 +1,7 @@
 ---
 import { getEntries } from 'astro:content';
 import type { GetStaticPaths } from 'astro';
+import { marked } from 'marked';
 
 import { TeamCard } from '#/components/card';
 import { MainLayout } from '#/layouts';
@@ -44,12 +45,12 @@ const sections = await Promise.all(
 >
 	<section class="flex flex-col gap-related-tight">
 		<h1 class="typo-h2">{pageTitle}</h1>
-		<p>{pageDescription}</p>
+		<div class="prose prose-custom" set:html={marked.parse(pageDescription)} />
 
 		{sections?.map((section) => (
     		<div class="flex flex-col gap-related-tight">
           <h2 class="typo-h3">{section.name}</h2>
-          <p>{section.description}</p>
+          {section.description && <div class="prose prose-custom" set:html={marked.parse(section.description)} />}
           <div class="flex flex-col gap-related-loose sm:grid sm:grid-cols-2 lg:grid-cols-3">
             {section.entries.map((person) => (
             <TeamCard {person}/>
