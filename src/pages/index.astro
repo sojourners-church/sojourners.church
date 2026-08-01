@@ -40,7 +40,7 @@ const bgImg = getImage(hero?.bgImage);
 				class="layout-base isolate z-20 col-start-1 row-start-1 gap-y-related"
 			>
 				<!-- biome-ignore lint/a11y/useHeadingContent: Content is provided via set:html -->
-				<h2 class="typo-hero" set:html={hero?.text.code} />
+				<h2 class="hero" set:html={hero?.text.code} />
 				{cta?.text && (
             <Button
               as='a'
@@ -55,3 +55,14 @@ const bgImg = getImage(hero?.bgImage);
 		</section>
 	</main>
 </BaseLayout>
+
+<!-- Inline typo-hero style to improve LCP -->
+<style>
+.hero {
+	font-size: clamp(3.129rem, 1.74rem + 5.93vw, 5.535rem);
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.1rem;
+	line-height: 1;
+}
+</style>
