@@ -29,7 +29,8 @@ collections:
         label_singular: Sermon Text
         required: false
         widget: list
-        field: { name: reference, label: Scripture Reference, widget: string }
+        field:
+          { name: reference, label: Scripture Reference, widget: scripture }
       - name: preacher
         label: Preacher
         widget: relation
