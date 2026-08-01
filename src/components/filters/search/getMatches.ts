@@ -1,4 +1,4 @@
-import { parser } from '#/lib/scriptureParsing/parse';
+import { parser } from '#/lib/scriptureParsing/';
 
 import { fuse } from './init';
 
