@@ -5,22 +5,10 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, envField, fontProviders } from 'astro/config';
 import icon from 'astro-icon';
 
-import {
-	getConfigFile,
-	navigationFeatureIsActive,
-	requireEnv,
-} from './src/lib/verifyEnvVars';
+import { verifyRequiredEnvVars } from './src/lib/verifyEnvVars';
 
-// If feature is active, verify Env variables set
-if (getConfigFile('footer').subscribe?.isActive) {
-	requireEnv('RESEND_API_KEY');
-	requireEnv('RESEND_SEGMENT_ID');
-}
-
-if (navigationFeatureIsActive('calendar')) {
-	requireEnv('PUBLIC_GOOGLE_CALENDAR_API_KEY');
-	requireEnv('PUBLIC_GOOGLE_CALENDAR_ID');
-}
+// Verify env variables set for active features
+verifyRequiredEnvVars();
 
 //biome-ignore-start lint/complexity/useLiteralKeys: fine here
 const SITE_URL =

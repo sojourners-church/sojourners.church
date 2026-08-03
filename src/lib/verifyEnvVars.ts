@@ -9,13 +9,24 @@ import { parse } from 'yaml';
 import type { ConfigCollection, ConfigFileName } from './content/getters';
 import type { NavigationFeatureEntry } from './content/types/navigation';
 
-export const requireEnv = (name: string) => {
+export const verifyRequiredEnvVars = () => {
+	if (getConfigFile('footer').subscribe?.isActive) {
+		requireEnv('RESEND_API_KEY');
+		requireEnv('RESEND_SEGMENT_ID');
+	}
+	if (navigationFeatureIsActive('calendar')) {
+		requireEnv('PUBLIC_GOOGLE_CALENDAR_API_KEY');
+		requireEnv('PUBLIC_GOOGLE_CALENDAR_ID');
+	}
+};
+
+const requireEnv = (name: string) => {
 	if (!process.env[name]) {
 		throw new Error(`Missing required environment variable: ${name}`);
 	}
 };
 
-export const getConfigFile = <C extends ConfigFileName>(
+const getConfigFile = <C extends ConfigFileName>(
 	filename: C,
 ): CollectionEntry<ConfigCollection<C>>['data'] => {
 	const siteConfigPath = path.resolve(`src/content/config/${filename}.yaml`);
@@ -25,7 +36,7 @@ export const getConfigFile = <C extends ConfigFileName>(
 	return siteConfig;
 };
 
-export const navigationFeatureIsActive = <
+const navigationFeatureIsActive = <
 	T extends NavigationFeatureEntry['featureType'],
 >(
 	type: T,
