@@ -1,4 +1,7 @@
-import type { NavigationFeatureEntry } from '#/lib/content/types/navigation';
+import type {
+	NavigationEntry,
+	NavigationFeatureEntry,
+} from '#/lib/content/types/navigation';
 
 import { getConfig } from './getConfig';
 
@@ -7,13 +10,9 @@ export const getPageNavigationEntries = async () => {
 
 	const pageEntries = [];
 
-	for (const entry of navigationEntries) {
-		if (entry.navigationEntryType === 'page') pageEntries.push(entry);
-
-		if (entry.navigationEntryType === 'group') {
-			for (const child of entry.children) {
-				if (child.navigationEntryType === 'page') pageEntries.push(child);
-			}
+	for (const entry of walkNavigation(navigationEntries)) {
+		if (entry.navigationEntryType === 'page') {
+			pageEntries.push(entry);
 		}
 	}
 
@@ -27,20 +26,23 @@ export const getFeatureNavigationEntry = async <
 ): Promise<NavigationFeatureEntry | undefined> => {
 	const { navigationEntries } = await getConfig('navigation');
 
-	for (const entry of navigationEntries) {
-		if (entry.navigationEntryType === 'feature' && entry.featureType === type)
+	for (const entry of walkNavigation(navigationEntries)) {
+		if (entry.navigationEntryType === 'feature' && entry.featureType === type) {
 			return entry;
-
-		if (entry.navigationEntryType === 'group') {
-			for (const child of entry.children) {
-				if (
-					child.navigationEntryType === 'feature' &&
-					child.featureType === type
-				)
-					return child;
-			}
 		}
 	}
 
 	return undefined;
 };
+
+function* walkNavigation(
+	entries: readonly NavigationEntry[],
+): IterableIterator<NavigationEntry> {
+	for (const entry of entries) {
+		yield entry;
+
+		if (entry.navigationEntryType === 'group') {
+			yield* walkNavigation(entry.children);
+		}
+	}
+}
