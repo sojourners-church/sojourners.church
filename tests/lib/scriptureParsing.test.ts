@@ -6,18 +6,17 @@ import {
 } from '#/lib/scriptureParsing/';
 
 describe('parseScriptureRef', () => {
-	it.each([
-		'John 121',
-		'Bob',
-		'jamez1',
-	])('returns false when passed an invalid scripture reference', (ref) => {
-		const result = parseScriptureRef(ref);
+	it.each(['John 121', 'Bob', 'jamez1'])(
+		'returns false when passed an invalid scripture reference',
+		(ref) => {
+			const result = parseScriptureRef(ref);
 
-		expect(result).toEqual({
-			ok: false,
-			error: `${ref} is not a valid scripture reference`,
-		});
-	});
+			expect(result).toEqual({
+				ok: false,
+				error: `${ref} is not a valid scripture reference`,
+			});
+		},
+	);
 
 	it.each([
 		['John 1', 'John.1', 'John 1', 'John 1'],
@@ -28,17 +27,20 @@ describe('parseScriptureRef', () => {
 			'1 Timothy 1:2—4:1',
 			'1 Tim. 1:2—4:1',
 		],
-	])('parses %s correctly', (ref, expectedOsis, expectedRef, expectedShortRef) => {
-		const result = parseScriptureRef(ref);
+	])(
+		'parses %s correctly',
+		(ref, expectedOsis, expectedRef, expectedShortRef) => {
+			const result = parseScriptureRef(ref);
 
-		expect(result.ok).toBe(true);
+			expect(result.ok).toBe(true);
 
-		if (!result.ok) return;
+			if (!result.ok) return;
 
-		expect(result.osis).toBe(expectedOsis);
-		expect(result.ref).toBe(expectedRef);
-		expect(result.shortRef).toBe(expectedShortRef);
-	});
+			expect(result.osis).toBe(expectedOsis);
+			expect(result.ref).toBe(expectedRef);
+			expect(result.shortRef).toBe(expectedShortRef);
+		},
+	);
 
 	it('expands scripture ranges', () => {
 		const result = parseScriptureRef('John 3:16-18');
@@ -54,20 +56,17 @@ describe('parseScriptureRef', () => {
 });
 
 describe('isValidScriptureRef', () => {
-	it.each([
-		'John 1',
-		'John 3:16',
-		'Romans 8:28-30',
-		'1 Timothy 1:2',
-	])('returns true for valid scripture references: %s', (ref) => {
-		expect(isValidScriptureRef(ref)).toBe(true);
-	});
+	it.each(['John 1', 'John 3:16', 'Romans 8:28-30', '1 Timothy 1:2'])(
+		'returns true for valid scripture references: %s',
+		(ref) => {
+			expect(isValidScriptureRef(ref)).toBe(true);
+		},
+	);
 
-	it.each([
-		'Bob',
-		'jamez1',
-		'',
-	])('returns false for invalid scripture references: %s', (ref) => {
-		expect(isValidScriptureRef(ref)).toBe(false);
-	});
+	it.each(['Bob', 'jamez1', ''])(
+		'returns false for invalid scripture references: %s',
+		(ref) => {
+			expect(isValidScriptureRef(ref)).toBe(false);
+		},
+	);
 });

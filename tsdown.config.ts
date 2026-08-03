@@ -8,8 +8,8 @@ export default defineConfig({
 	unbundle: false, // bundle dependencies
 	deps: {
 		alwaysBundle: [
-			'bible-passage-reference-parser/esm/bcv_parser',
-			'bible-passage-reference-parser/esm/lang/en',
+			'bible-passage-reference-parser/esm/bcv_parser.js',
+			'bible-passage-reference-parser/esm/lang/en.js',
 		],
 		onlyBundle: false,
 	},

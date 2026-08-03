@@ -10,7 +10,7 @@ var __exportAll = (all, no_symbols) => {
 	return target;
 };
 //#endregion
-//#region node_modules/.pnpm/bible-passage-reference-parser@3.2.0/node_modules/bible-passage-reference-parser/esm/bcv_parser.js
+//#region node_modules/.pnpm/bible-passage-reference-parser@4.0.0/node_modules/bible-passage-reference-parser/esm/bcv_parser.js
 var peg$SyntaxError = class extends SyntaxError {
 	constructor(message, expected, found, location) {
 		super(message);
@@ -3074,9 +3074,9 @@ function peg$parse(input, options) {
 	else peg$throw();
 }
 var bcv_matcher = class {
-	constructor(parent, grammar_options2) {
+	constructor(parent, grammar_options) {
 		this.parent = parent;
-		this.parent.options.grammar = structuredClone(grammar_options2);
+		this.parent.options.grammar = structuredClone(grammar_options);
 	}
 	replace_control_characters(s) {
 		return s.replace(this.parent.regexps.control, " ");
@@ -3141,14 +3141,16 @@ var bcv_matcher = class {
 			match.index += full.length - original_part_length;
 			part = this.clean_end_match(s, match, part);
 			const start_index_adjust = part.startsWith("") ? 0 : part.split("")[0].length;
+			const start_index = this.parent.passage.books[book_id_number].start_index;
+			if (start_index == null) continue;
 			const passage = {
 				value: peg$parse(part, this.parent.options.grammar),
 				type: "base",
-				start_index: this.parent.passage.books[book_id_number].start_index - start_index_adjust,
+				start_index: start_index - start_index_adjust,
 				match: part
 			};
-			const book_parsed = this.parent.passage.books[book_id_number].parsed;
-			if (start_index_adjust === 0 && this.parent.options.book_alone_strategy === "full" && this.parent.options.book_range_strategy === "include" && passage.value[0].type === "b" && Array.isArray(passage.value) && (passage.value.length === 1 || passage.value.length > 1 && passage.value[1].type === "translation_sequence") && /^[234]/.test(book_parsed)) this.create_book_range(s, passage, book_id_number);
+			const book_parsed = this.parent.passage.books[book_id_number].parsed[0];
+			if (start_index_adjust === 0 && this.parent.options.book_alone_strategy === "full" && this.parent.options.book_range_strategy === "include" && Array.isArray(passage.value) && passage.value[0].type === "b" && (passage.value.length === 1 || passage.value.length > 1 && passage.value[1].type === "translation_sequence") && /^[234]/.test(book_parsed)) this.create_book_range(s, passage, book_id_number);
 			let accum = [];
 			[accum, post_context] = this.parent.passage.handle_obj(passage, [], {});
 			entities = entities.concat(accum);
@@ -3165,7 +3167,7 @@ var bcv_matcher = class {
 			if (sub_parts.length > 0 && remove != null && remove.length > 0) part = part.substring(0, part.length - remove.length);
 		}
 		if (this.parent.options.captive_end_digits_strategy === "delete") {
-			const next_char_index = match.index + part.length;
+			const next_char_index = (match.index ?? 0) + part.length;
 			if (s.length > next_char_index && /^\w/.test(s.charAt(next_char_index))) part = part.replace(/[\s*]+\d+$/, "");
 			part = part.replace(/(\x1e[)\]]?)[\s*]*\d+$/, "$1");
 		}
@@ -3193,23 +3195,28 @@ var bcv_matcher = class {
 	}
 	add_book_range_object(passage, prev, start_book_number) {
 		const length = prev[1].length;
+		const prev_index = prev.index ?? 0;
+		const original_book = passage.value[0];
 		passage.value[0] = {
 			type: "b_range_pre",
 			value: [{
 				type: "b_pre",
 				value: start_book_number.toString(),
-				indices: [prev.index, prev.index + length]
-			}, passage.value[0]],
-			indices: [0, passage.value[0].indices[1] + length]
+				indices: [prev_index, prev_index + length]
+			}, original_book],
+			indices: [0, original_book.indices[1] + length]
 		};
-		this.add_offset_to_indices(passage.value[0].value[1].indices, length);
-		passage.start_index -= length;
+		this.add_offset_to_indices(original_book.indices, length);
+		if (passage.start_index != null) passage.start_index -= length;
 		passage.match = prev[1] + passage.match;
 		if (!Array.isArray(passage.value)) return passage;
 		for (let i = 1; i < passage.value.length; i++) {
-			if (!passage.value[i].value) continue;
-			if (passage.value[i].value[0]?.indices) this.add_offset_to_indices(passage.value[i].value[0].indices, length);
-			this.add_offset_to_indices(passage.value[i].indices, length);
+			const entity = passage.value[i];
+			const value = entity.value;
+			if (!value) continue;
+			const first_value = Array.isArray(value) ? value[0] : null;
+			if (first_value != null && !Array.isArray(first_value) && first_value.indices != null) this.add_offset_to_indices(first_value.indices, length);
+			if (entity.indices != null) this.add_offset_to_indices(entity.indices, length);
 		}
 		return passage;
 	}
@@ -3272,7 +3279,7 @@ var bcv_options = class {
 		return this.#testaments;
 	}
 	set testaments(filter) {
-		if (filter === this.#testaments || filter.length === 0) return;
+		if (filter === this.#testaments) return;
 		const filters = filter.split("");
 		let out = "";
 		if (filters[0] === "o") {
@@ -3284,6 +3291,7 @@ var bcv_options = class {
 			out += "n";
 		}
 		if (filters.length > 0 && filters[0] === "a") out += "a";
+		if ((out !== filter || filter.length === 0) && this.warn_level === "warn") console.warn(`testaments should be some combination of "o", "n", and "a" (in that order), not: "${filter}". Using "${out.length > 0 ? out : this.#testaments}" instead.`);
 		if (out.length > 0 && out !== this.#testaments) {
 			const new_apocrypha = out.indexOf("a") >= 0;
 			const old_apocrypha = this.#testaments.indexOf("a") >= 0;
@@ -3294,9 +3302,11 @@ var bcv_options = class {
 	}
 	set_apocrypha(include_apocrypha) {
 		this.parent.regexps_manager.filter_books(this.#testaments, this.case_sensitive);
+		const default_ps_chapters = this.parent.translations.systems.default.chapters?.["Ps"];
+		if (default_ps_chapters == null) return;
 		for (const translation of Object.keys(this.parent.translations.systems)) {
 			this.parent.translations.systems[translation].chapters ??= {};
-			this.parent.translations.systems[translation].chapters["Ps"] ??= [...this.parent.translations.systems.current.chapters["Ps"]];
+			this.parent.translations.systems[translation].chapters["Ps"] ??= [...default_ps_chapters];
 			if (include_apocrypha === true) this.parent.translations.systems[translation].chapters["Ps"][150] = this.parent.translations.systems[translation].chapters["Ps151"]?.[0] ?? this.parent.translations.systems.current.chapters["Ps151"][0];
 			else if (this.parent.translations.systems[translation].chapters?.["Ps"].length === 151) this.parent.translations.systems[translation].chapters["Ps"].pop();
 		}
@@ -3305,12 +3315,13 @@ var bcv_options = class {
 		return this.parent.translations.current_system;
 	}
 	set versification_system(system) {
-		if (this.parent.translations.aliases[system]?.system) system = this.parent.translations.aliases[system].system;
+		const alias_system = this.parent.translations.aliases[system]?.system;
+		if (alias_system) system = alias_system;
 		if (!this.parent.translations.systems[system]) {
 			if (this.warn_level === "warn") console.warn(`Unknown versification system ("${system}"). Using default instead.`);
 			system = "default";
 		}
-		if (!system || system === this.parent.translations.current_system) return;
+		if (system === this.parent.translations.current_system) return;
 		if (this.parent.translations.current_system !== "default") this.parent.translations.systems.current = structuredClone(this.parent.translations.systems.default);
 		this.parent.translations.current_system = system;
 		if (system === "default") return;
@@ -3319,6 +3330,7 @@ var bcv_options = class {
 			...structuredClone(this.parent.translations.systems.default.chapters),
 			...structuredClone(this.parent.translations.systems[system].chapters)
 		};
+		if (this.#testaments.includes("a")) this.set_apocrypha(true);
 	}
 	#case_sensitive;
 	get case_sensitive() {
@@ -3351,9 +3363,142 @@ var bcv_options = class {
 			return;
 		}
 		this.#punctuation_strategy = arg;
-		this.#grammar.c_sep = this.#grammar[`c_sep_${arg}`];
-		this.#grammar.cv_sep = this.#grammar[`cv_sep_${arg}`];
-		this.#grammar.sequence = this.#grammar[`sequence_${arg}`];
+		const c_sep_key = `c_sep_${arg}`;
+		const cv_sep_key = `cv_sep_${arg}`;
+		const sequence_key = `sequence_${arg}`;
+		this.#grammar.c_sep = this.#grammar[c_sep_key];
+		this.#grammar.cv_sep = this.#grammar[cv_sep_key];
+		this.#grammar.sequence = this.#grammar[sequence_key];
+	}
+};
+var bcv_validators = class {
+	constructor(options, translations) {
+		this.options = options;
+		this.translations = translations;
+	}
+	validate_ref(translations, start, end = null) {
+		if (!translations || translations.length === 0 || !Array.isArray(translations)) translations = [{
+			osis: "",
+			translation: "current",
+			system: "current"
+		}];
+		let valid = false;
+		const messages = {};
+		for (const translation of translations) {
+			if (!translation.system) {
+				messages.translation_invalid ??= [];
+				messages.translation_invalid.push(translation);
+				continue;
+			}
+			if (!this.translations.aliases[translation.system]) {
+				translation.system = "current";
+				messages.translation_unknown ??= [];
+				messages.translation_unknown.push(translation);
+			}
+			let [temp_valid] = this.validate_start_ref(translation.system, start, messages);
+			if (end) [temp_valid] = this.validate_end_ref(translation.system, start, end, temp_valid, messages);
+			if (temp_valid === true) valid = true;
+		}
+		return {
+			valid,
+			messages
+		};
+	}
+	validate_end_ref(system, start, end, valid, messages) {
+		const order = this.translations.systems[system]?.order || this.translations.systems.current.order;
+		if (end.c === 0) {
+			messages.end_chapter_is_zero = 1;
+			if (this.options.zero_chapter_strategy === "error") valid = false;
+			else end.c = 1;
+		}
+		if (end.v === 0) {
+			messages.end_verse_is_zero = 1;
+			if (this.options.zero_verse_strategy === "error") valid = false;
+			else if (this.options.zero_verse_strategy === "upgrade") end.v = 1;
+		}
+		if (end.b && order[end.b] != null) valid = this.validate_known_end_book(system, order, start, end, valid, messages);
+		else {
+			valid = false;
+			messages.end_book_not_exist = true;
+		}
+		return [valid, messages];
+	}
+	validate_known_end_book(system, order, start, end, valid, messages) {
+		const chapter_array = this.translations.systems[system]?.chapters?.[end.b] || this.translations.systems.current.chapters[end.b];
+		if (end.c == null && chapter_array.length === 1) end.c = 1;
+		if (order[start.b] != null && order[start.b] > order[end.b]) {
+			if (this.options.passage_existence_strategy.indexOf("b") >= 0) valid = false;
+			messages.end_book_before_start = true;
+		}
+		if (start.b === end.b && end.c != null) {
+			start.c ??= 1;
+			if (start.c > end.c) {
+				valid = false;
+				messages.end_chapter_before_start = true;
+			} else if (start.c === end.c && end.v != null) {
+				start.v ??= 1;
+				if (start.v > end.v) {
+					valid = false;
+					messages.end_verse_before_start = true;
+				}
+			}
+		}
+		if (end.c != null && chapter_array[end.c - 1] == null) {
+			if (chapter_array.length === 1) messages.end_chapter_not_exist_in_single_chapter_book = 1;
+			else if (end.c > 0 && this.options.passage_existence_strategy.indexOf("c") >= 0) messages.end_chapter_not_exist = chapter_array.length;
+		}
+		if (end.v != null) {
+			end.c ??= chapter_array.length;
+			if (end.v > chapter_array[end.c - 1] && this.options.passage_existence_strategy.indexOf("v") >= 0) messages.end_verse_not_exist = chapter_array[end.c - 1];
+		}
+		return valid;
+	}
+	validate_known_start_book(system, start, messages) {
+		let valid = true;
+		start.c ??= 1;
+		const chapter_array = this.translations.systems[system]?.chapters?.[start.b] || this.translations.systems.current.chapters[start.b];
+		if (start.c === 0) {
+			messages.start_chapter_is_zero = 1;
+			if (this.options.zero_chapter_strategy === "error") valid = false;
+			else start.c = 1;
+		}
+		if (start.v === 0) {
+			messages.start_verse_is_zero = 1;
+			if (this.options.zero_verse_strategy === "error") valid = false;
+			else if (this.options.zero_verse_strategy === "upgrade") start.v = 1;
+		}
+		if (start.c > 0 && chapter_array[start.c - 1] != null) {
+			if (start.v != null) {
+				if (start.v > chapter_array[start.c - 1] && this.options.passage_existence_strategy.indexOf("v") >= 0) {
+					valid = false;
+					messages.start_verse_not_exist = chapter_array[start.c - 1];
+				}
+			} else if (start.c === 1 && chapter_array.length === 1) if (this.options.single_chapter_1_strategy === "verse") messages.start_verse_1 = 1;
+			else messages.start_chapter_1 = 1;
+		} else {
+			const chapter_array_length = chapter_array.length;
+			if (start.c !== 1 && chapter_array_length === 1) {
+				valid = false;
+				messages.start_chapter_not_exist_in_single_chapter_book = 1;
+			} else if (start.c > 0 && this.options.passage_existence_strategy.indexOf("c") >= 0) {
+				valid = false;
+				messages.start_chapter_not_exist = chapter_array_length;
+			}
+		}
+		return valid;
+	}
+	validate_start_ref(system, start, messages) {
+		let valid = true;
+		const order = this.translations.systems[system]?.order || this.translations.systems.current.order;
+		if (!start.b) {
+			valid = false;
+			messages.start_book_not_defined = true;
+		} else if (order[start.b] != null) valid = this.validate_known_start_book(system, start, messages);
+		else {
+			if (this.options.passage_existence_strategy.indexOf("b") >= 0) valid = false;
+			messages.start_book_not_exist = true;
+		}
+		return [valid, messages];
 	}
 };
 var bcv_passage = class {
@@ -3362,6 +3507,7 @@ var bcv_passage = class {
 		this.indices = [];
 		this.options = options;
 		this.translations = translations;
+		this.validators = new bcv_validators(options, translations);
 	}
 	handle_array(passages, accum = [], context = {}) {
 		for (const passage of passages) {
@@ -3371,7 +3517,9 @@ var bcv_passage = class {
 		return [accum, context];
 	}
 	handle_obj(passage, accum, context) {
-		if (passage.type && typeof this[passage.type] === "function") return this[passage.type](passage, accum, context);
+		const type = passage.type;
+		const handler = this[type];
+		if (typeof handler === "function") return handler.call(this, passage, accum, context);
 		return [accum, context];
 	}
 	b(passage, accum, context) {
@@ -3392,9 +3540,6 @@ var bcv_passage = class {
 		accum.push(passage);
 		context = { b: passage.passages[0].start.b };
 		if (passage.start_context.translations) context.translations = structuredClone(passage.start_context.translations);
-		return [accum, context];
-	}
-	b_pre(passage, accum, context) {
 		return [accum, context];
 	}
 	b_range(passage, accum, context) {
@@ -3455,7 +3600,10 @@ var bcv_passage = class {
 					b,
 					v: c
 				});
-				if (valid.messages?.start_chapter_not_exist_in_single_chapter_book) obj.valid.messages.start_chapter_not_exist_in_single_chapter_book = 1;
+				if (valid.messages?.start_chapter_not_exist_in_single_chapter_book) {
+					obj.valid.messages ??= {};
+					obj.valid.messages.start_chapter_not_exist_in_single_chapter_book = 1;
+				}
 				obj.start.c = 1;
 				obj.end.c = 1;
 				context_key = "v";
@@ -3621,10 +3769,11 @@ var bcv_passage = class {
 	}
 	c_psalm(passage, accum, context) {
 		passage.type = "bc";
-		const c = parseInt(this.books[passage.value].value.match(/^\d+/)[0], 10);
+		const book_index = passage.value;
+		const c = parseInt(this.books[book_index].value.match(/^\d+/)[0], 10);
 		passage.value = [{
 			type: "b",
-			value: passage.value,
+			value: book_index,
 			indices: passage.indices
 		}, {
 			type: "c",
@@ -3748,7 +3897,7 @@ var bcv_passage = class {
 		passage.value[1].value = [{
 			type: "integer",
 			value: 1,
-			indices: structuredClone(passage.value[1].value.indices)
+			indices: structuredClone(passage.value[1].indices)
 		}];
 		passage.type = "cv";
 		return this.cv(passage, accum, passage.start_context);
@@ -3865,29 +4014,33 @@ var bcv_passage = class {
 		passage.value = [start, end];
 		passage.indices = [start.indices[0], end.indices[1]];
 		delete passage.absolute_indices;
+		const start_passage = start.passages[0];
+		const end_passage = end.passages[0];
 		const start_obj = {
-			b: start.passages[0].start.b,
-			c: start.passages[0].start.c,
-			v: start.passages[0].start.v,
+			b: start_passage.start.b,
+			c: start_passage.start.c,
+			v: start_passage.start.v,
 			type: start.type
 		};
-		if (start.passages[0].start.p != null) start_obj.p = start.passages[0].start.p;
-		if (start.passages[0].start.p_if_verse != null) start_obj.p_if_verse = start.passages[0].start.p_if_verse;
+		if (start_passage.start.p != null) start_obj.p = start_passage.start.p;
+		if (start_passage.start.p_if_verse != null) start_obj.p_if_verse = start_passage.start.p_if_verse;
 		const end_obj = {
-			b: end.passages[0].end.b,
-			c: end.passages[0].end.c,
-			v: end.passages[0].end.v,
+			b: end_passage.end.b,
+			c: end_passage.end.c,
+			v: end_passage.end.v,
 			type: end.type
 		};
-		if (end.passages[0].end.p != null) end_obj.p = end.passages[0].end.p;
-		if (end.passages[0].end.p_if_verse != null) end_obj.p = end.passages[0].end.p_if_verse;
-		if (start.passages[0].start.p_if_verse != null) start_obj.p_if_verse = start.passages[0].start.p_if_verse;
-		if (end.passages[0].valid.messages.start_chapter_is_zero) end_obj.c = 0;
-		if (end.passages[0].valid.messages.start_verse_is_zero) end_obj.v = 0;
+		if (end_passage.end.p != null) end_obj.p = end_passage.end.p;
+		if (end_passage.end.p_if_verse != null) end_obj.p_if_verse = end_passage.end.p_if_verse;
+		if (end_passage.valid.messages.start_chapter_is_zero) end_obj.c = 0;
+		if (end_passage.valid.messages.start_verse_is_zero) end_obj.v = 0;
 		const valid = this.validate_ref(passage.start_context.translations, start_obj, end_obj);
 		if (valid.valid) {
 			const [return_now, return_value] = this.range_handle_valid(valid, passage, start, start_obj, end, end_obj, accum);
-			if (return_now) return return_value;
+			if (return_now) {
+				if (return_value != null) return return_value;
+				return [accum, context];
+			}
 		} else return this.range_handle_invalid(valid, passage, start, start_obj, end, end_obj, accum);
 		passage.absolute_indices ??= this.get_absolute_indices(passage.indices);
 		passage.passages = [{
@@ -3903,16 +4056,12 @@ var bcv_passage = class {
 	}
 	range_change_end(passage, accum, new_end) {
 		const [start, end] = passage.value;
-		if (end.type === "integer") {
-			end.original_value = end.value;
-			end.value = new_end;
-		} else if (end.type === "v") {
+		if (end.type === "integer") end.value = new_end;
+		else if (end.type === "v") {
 			const new_obj = this.pluck("integer", end.value);
-			new_obj.original_value = new_obj.value;
 			new_obj.value = new_end;
 		} else if (end.type === "cv") {
 			const new_obj = this.pluck_integer("c", end.value);
-			new_obj.original_value = new_obj.value;
 			new_obj.value = new_end;
 		}
 		return this.handle_obj(passage, accum, passage.start_context);
@@ -3921,7 +4070,7 @@ var bcv_passage = class {
 		const [start, end] = passage.value;
 		passage.original_type ??= passage.type;
 		passage.original_value ??= [start, end];
-		passage.type = start.type === "integer" ? "cv" : start.type + "v";
+		passage.type = start.type === "bc" ? "bcv" : "cv";
 		if (start.type === "integer") passage.value[0] = {
 			type: "c",
 			value: [start],
@@ -3958,8 +4107,10 @@ var bcv_passage = class {
 	range_get_new_end_value(start_obj, end_obj, valid, key) {
 		let new_end = 0;
 		if (key === "c" && valid.messages?.end_chapter_is_zero || key === "v" && valid.messages?.end_verse_is_zero) return new_end;
-		if (start_obj[key] >= 10 && end_obj[key] < 10 && start_obj[key] - 10 * Math.floor(start_obj[key] / 10) < end_obj[key]) new_end = end_obj[key] + 10 * Math.floor(start_obj[key] / 10);
-		else if (start_obj[key] >= 100 && end_obj[key] < 100 && start_obj[key] - 100 < end_obj[key]) new_end = end_obj[key] + 100;
+		const start_value = start_obj[key];
+		const end_value = end_obj[key];
+		if (start_value >= 10 && end_value < 10 && start_value - 10 * Math.floor(start_value / 10) < end_value) new_end = end_value + 10 * Math.floor(start_value / 10);
+		else if (start_value >= 100 && end_value < 100 && start_value - 100 < end_value) new_end = end_value + 100;
 		return new_end;
 	}
 	range_handle_invalid(valid, passage, start, start_obj, end, end_obj, accum) {
@@ -3967,8 +4118,8 @@ var bcv_passage = class {
 			const new_end = this.range_check_new_end(passage.start_context.translations, start_obj, end_obj, valid);
 			if (new_end > 0) return this.range_change_end(passage, accum, new_end);
 		}
-		if (this.options.end_range_digits_strategy === "verse" && start_obj.v == null && (end.type === "integer" || end.type === "v")) {
-			const temp_value = end.type === "v" ? this.pluck("integer", end.value) : end.value;
+		if (this.options.end_range_digits_strategy === "verse" && start_obj.v == null && end.type === "integer" && passage.type !== "ff" && passage.type !== "next_v") {
+			const temp_value = end.value;
 			if (this.validate_ref(passage.start_context.translations, {
 				b: start_obj.b,
 				c: start_obj.c,
@@ -3977,12 +4128,14 @@ var bcv_passage = class {
 		}
 		passage.original_type ??= passage.type;
 		passage.type = "sequence";
-		[passage.original_value, passage.value] = [[start, end], [[start], [end]]];
-		return this.sequence(passage, accum, structuredClone(passage.start_context));
+		const sequence_passage = passage;
+		sequence_passage.original_value = [start, end];
+		sequence_passage.value = [[start], [end]];
+		return this.sequence(sequence_passage, accum, structuredClone(passage.start_context));
 	}
 	range_handle_valid(valid, passage, start, start_obj, end, end_obj, accum) {
-		if (valid.messages?.end_chapter_not_exist && this.options.end_range_digits_strategy === "verse" && !start_obj.v && (end.type === "integer" || end.type === "v") && this.options.passage_existence_strategy.indexOf("v") >= 0) {
-			const temp_value = end.type === "v" ? this.pluck("integer", end.value) : end.value;
+		if (valid.messages?.end_chapter_not_exist && this.options.end_range_digits_strategy === "verse" && !start_obj.v && end.type === "integer" && passage.type !== "ff" && passage.type !== "next_v" && this.options.passage_existence_strategy.indexOf("v") >= 0) {
+			const temp_value = end.value;
 			if (this.validate_ref(passage.start_context.translations, {
 				b: start_obj.b,
 				c: start_obj.c,
@@ -4019,14 +4172,26 @@ var bcv_passage = class {
 	translation_sequence(passage, accum, context) {
 		passage.start_context = structuredClone(context);
 		const translations = [];
-		translations.push({
-			translation: this.books[passage.value[0].value].parsed,
-			system: "default",
-			osis: ""
-		});
-		for (const val of passage.value[1]) {
-			const translation = this.books[this.pluck("translation", val).value].parsed;
-			if (translation) translations.push({
+		if (!Array.isArray(passage.value) || passage.value.length < 2) {
+			accum.push(passage);
+			this.reset_context(context, ["translations"]);
+			return [accum, context];
+		}
+		const value = passage.value;
+		const first_book_index = value[0].value;
+		if (typeof first_book_index === "number") {
+			const first_parsed = this.books[first_book_index]?.parsed;
+			if (typeof first_parsed === "string" && first_parsed.length > 0) translations.push({
+				translation: first_parsed,
+				system: "default",
+				osis: ""
+			});
+		}
+		for (const val of value[1]) {
+			const translation_obj = this.pluck("translation", val);
+			if (translation_obj == null || typeof translation_obj.value !== "number") continue;
+			const translation = this.books[translation_obj.value]?.parsed;
+			if (typeof translation === "string" && translation.length > 0) translations.push({
 				translation,
 				system: "default",
 				osis: ""
@@ -4067,7 +4232,9 @@ var bcv_passage = class {
 		return null;
 	}
 	pluck_integer(type, passages) {
-		return this.pluck("integer", this.pluck(type, passages).value);
+		const outer = this.pluck(type, passages);
+		if (outer == null || !Array.isArray(outer.value)) return null;
+		return this.pluck("integer", outer.value);
 	}
 	pluck_last_recursively(type, passages) {
 		for (let i = passages.length - 1; i >= 0; i--) {
@@ -4082,7 +4249,7 @@ var bcv_passage = class {
 	set_context_from_object(context, keys, obj) {
 		for (const key of keys) {
 			if (obj[key] == null) continue;
-			context[key] = obj[key];
+			Reflect.set(context, key, obj[key]);
 		}
 	}
 	reset_context(context, keys) {
@@ -4117,7 +4284,9 @@ var bcv_passage = class {
 					index: adjust
 				});
 				match_index += part_length + 2;
-				adjust = this.books[part_i].start_index + this.books[part_i].value.length - match_index;
+				const book = this.books[part_i];
+				if (book?.start_index == null) continue;
+				adjust = book.start_index + book.value.length - match_index;
 				indices.push({
 					start: end_index + 1,
 					end: end_index + 1,
@@ -4136,7 +4305,8 @@ var bcv_passage = class {
 		}
 		return indices;
 	}
-	get_absolute_indices([start, end]) {
+	get_absolute_indices(indices) {
+		const [start, end] = indices;
 		let start_out = null;
 		let end_out = null;
 		for (const index of this.indices) {
@@ -4148,6 +4318,15 @@ var bcv_passage = class {
 		}
 		return [start_out, end_out];
 	}
+	validate_ref(...args) {
+		return this.validators.validate_ref(...args);
+	}
+	validate_start_ref(...args) {
+		return this.validators.validate_start_ref(...args);
+	}
+	validate_end_ref(...args) {
+		return this.validators.validate_end_ref(...args);
+	}
 	normalize_passage_and_alternates(passage, alternates, adjust_end_index_by = 0) {
 		if (passage.passages.length === 0) passage.passages.push(alternates.shift());
 		if (alternates.length > 0) passage.passages[0].alternates = alternates;
@@ -4157,131 +4336,12 @@ var bcv_passage = class {
 			if (adjust_end_index_by !== 0) passage.absolute_indices[1] += adjust_end_index_by;
 		}
 	}
-	validate_ref(translations, start, end = null) {
-		if (!translations || translations.length === 0 || !Array.isArray(translations)) translations = [{
-			osis: "",
-			translation: "current",
-			system: "current"
-		}];
-		let valid = false;
-		const messages = {};
-		for (const translation of translations) {
-			if (!translation.system) {
-				messages.translation_invalid ??= [];
-				messages.translation_invalid.push(translation);
-				continue;
-			}
-			if (!this.translations.aliases[translation.system]) {
-				translation.system = "current";
-				messages.translation_unknown ??= [];
-				messages.translation_unknown.push(translation);
-			}
-			let [temp_valid] = this.validate_start_ref(translation.system, start, messages);
-			if (end) [temp_valid] = this.validate_end_ref(translation.system, start, end, temp_valid, messages);
-			if (temp_valid === true) valid = true;
-		}
-		return {
-			valid,
-			messages
-		};
-	}
-	validate_end_ref(system, start, end, valid, messages) {
-		const order_system = this.translations.systems[system]?.order ? system : "current";
-		if (end.c === 0) {
-			messages.end_chapter_is_zero = 1;
-			if (this.options.zero_chapter_strategy === "error") valid = false;
-			else end.c = 1;
-		}
-		if (end.v === 0) {
-			messages.end_verse_is_zero = 1;
-			if (this.options.zero_verse_strategy === "error") valid = false;
-			else if (this.options.zero_verse_strategy === "upgrade") end.v = 1;
-		}
-		if (end.b && this.translations.systems[order_system].order[end.b]) valid = this.validate_known_end_book(system, order_system, start, end, valid, messages);
-		else {
-			valid = false;
-			messages.end_book_not_exist = true;
-		}
-		return [valid, messages];
-	}
-	validate_known_end_book(system, order_system, start, end, valid, messages) {
-		const chapter_array = this.translations.systems[system]?.chapters?.[end.b] || this.translations.systems.current.chapters[end.b];
-		if (end.c == null && chapter_array.length === 1) end.c = 1;
-		if (this.translations.systems[order_system].order[start.b] != null && this.translations.systems[order_system].order[start.b] > this.translations.systems[order_system].order[end.b]) {
-			if (this.options.passage_existence_strategy.indexOf("b") >= 0) valid = false;
-			messages.end_book_before_start = true;
-		}
-		if (start.b === end.b && end.c != null) {
-			start.c ??= 1;
-			if (start.c > end.c) {
-				valid = false;
-				messages.end_chapter_before_start = true;
-			} else if (start.c === end.c && end.v != null) {
-				start.v ??= 1;
-				if (start.v > end.v) {
-					valid = false;
-					messages.end_verse_before_start = true;
-				}
-			}
-		}
-		if (end.c != null && chapter_array[end.c - 1] == null) {
-			if (chapter_array.length === 1) messages.end_chapter_not_exist_in_single_chapter_book = 1;
-			else if (end.c > 0 && this.options.passage_existence_strategy.indexOf("c") >= 0) messages.end_chapter_not_exist = chapter_array.length;
-		}
-		if (end.v != null) {
-			end.c ??= chapter_array.length;
-			if (end.v > chapter_array[end.c - 1] && this.options.passage_existence_strategy.indexOf("v") >= 0) messages.end_verse_not_exist = chapter_array[end.c - 1];
-		}
-		return valid;
-	}
-	validate_known_start_book(system, start, messages) {
-		let valid = true;
-		start.c ??= 1;
-		const chapter_array = this.translations.systems[system]?.chapters?.[start.b] || this.translations.systems.current.chapters[start.b];
-		if (start.c === 0) {
-			messages.start_chapter_is_zero = 1;
-			if (this.options.zero_chapter_strategy === "error") valid = false;
-			else start.c = 1;
-		}
-		if (start.v === 0) {
-			messages.start_verse_is_zero = 1;
-			if (this.options.zero_verse_strategy === "error") valid = false;
-			else if (this.options.zero_verse_strategy === "upgrade") start.v = 1;
-		}
-		if (start.c > 0 && chapter_array[start.c - 1] != null) {
-			if (start.v != null) {
-				if (start.v > chapter_array[start.c - 1] && this.options.passage_existence_strategy.indexOf("v") >= 0) {
-					valid = false;
-					messages.start_verse_not_exist = chapter_array[start.c - 1];
-				}
-			} else if (start.c === 1 && chapter_array.length === 1) if (this.options.single_chapter_1_strategy === "verse") messages.start_verse_1 = 1;
-			else messages.start_chapter_1 = 1;
-		} else {
-			const chapter_array_length = chapter_array.length;
-			if (start.c !== 1 && chapter_array_length === 1) {
-				valid = false;
-				messages.start_chapter_not_exist_in_single_chapter_book = 1;
-			} else if (start.c > 0 && this.options.passage_existence_strategy.indexOf("c") >= 0) {
-				valid = false;
-				messages.start_chapter_not_exist = chapter_array_length;
-			}
-		}
-		return valid;
-	}
-	validate_start_ref(system, start, messages) {
-		let valid = true;
-		const order_system = this.translations.systems[system]?.order ? system : "current";
-		if (!start.b) {
-			valid = false;
-			messages.start_book_not_defined = true;
-		} else if (this.translations.systems[order_system].order[start.b]) valid = this.validate_known_start_book(system, start, messages);
-		else {
-			if (this.options.passage_existence_strategy.indexOf("b") >= 0) valid = false;
-			messages.start_book_not_exist = true;
-		}
-		return [valid, messages];
-	}
 };
+var TESTAMENT_ORDER = [
+	"o",
+	"n",
+	"a"
+];
 var bcv_regexps_manager = class {
 	constructor(parent) {
 		this.filtered_books_flags = "";
@@ -4292,7 +4352,10 @@ var bcv_regexps_manager = class {
 		const filtered_books_flags = testaments + "/" + case_sensitive;
 		if (filtered_books_flags === this.filtered_books_flags) return;
 		this.filtered_books_flags = filtered_books_flags;
-		if (testaments === "ona" && case_sensitive === "none") this.parent.regexps.books = this.parent.regexps.all_books;
+		if (testaments === "ona" && case_sensitive === "none") {
+			this.parent.regexps.books = this.parent.regexps.all_books;
+			return;
+		}
 		this.parent.regexps.books = this.parent.regexps.all_books.reduce((accum, book) => {
 			let cloned_book;
 			if (testaments !== "ona" && testaments.indexOf(book.testament) === -1) if (book.testament.length === 1 || book.testament_books == null) return accum;
@@ -4374,11 +4437,11 @@ var bcv_regexps_manager = class {
 	}
 	get_book_testaments(pattern) {
 		const books = pattern.osis;
-		if (!Array.isArray(books)) throw new Error("add_books: The `osis` property of each pattern should be an array");
+		if (!Array.isArray(books) || books.length === 0) throw new Error("add_books: The `osis` property of each pattern should be a non-empty array");
 		const out = {
 			testament_books: {},
 			has_number_book: false,
-			testament: ""
+			testament: "ona"
 		};
 		const testaments = /* @__PURE__ */ new Set();
 		for (const book of books) {
@@ -4398,24 +4461,23 @@ var bcv_regexps_manager = class {
 			}
 		}
 		if (testaments.size === 1) out.testament = testaments.values().next().value;
-		else for (const key of [
-			"o",
-			"n",
-			"a"
-		]) if (testaments.has(key)) out.testament += key;
+		else out.testament = TESTAMENT_ORDER.filter((testament) => testaments.has(testament)).join("");
 		return out;
 	}
 };
+var DEFAULT_SYSTEM = "default";
+var CURRENT_SYSTEM = "current";
 var bcv_translations_manager = class {
 	constructor(parent) {
 		this.parent = parent;
 	}
-	translation_info(system = "default") {
-		if (typeof system !== "string" || !system) system = "default";
-		if (this.parent.translations.aliases[system]?.system) system = this.parent.translations.aliases[system].system;
+	translation_info(system = DEFAULT_SYSTEM) {
+		if (typeof system !== "string" || !system) system = DEFAULT_SYSTEM;
+		const alias_system = this.parent.translations.aliases[system]?.system;
+		if (alias_system) system = alias_system;
 		if (this.parent.translations.systems[system] == null) {
-			if (this.parent.options.warn_level === "warn") console.warn("Unknown translation `" + new_translation + "` in translation_info(). Using default instead.");
-			system = "default";
+			if (this.parent.options.warn_level === "warn") console.warn("Unknown translation `" + system + "` in translation_info(). Using default instead.");
+			system = DEFAULT_SYSTEM;
 		}
 		const old_system = this.parent.options.versification_system;
 		this.parent.options.versification_system = system;
@@ -4431,21 +4493,21 @@ var bcv_translations_manager = class {
 		return out;
 	}
 	add_translations(new_translations) {
-		if (new_translations?.translations == null || !Array.isArray(new_translations.translations) || new_translations.translations.length === 0) throw new Error("add_translations: A `translations array in the `translations` key should have at least one object");
+		if (new_translations?.translations == null || !Array.isArray(new_translations.translations) || new_translations.translations.length === 0) throw new Error("add_translations: The `translations` key should be an array with at least one object");
 		const normalized_translations = {};
 		const texts_for_regexp = [];
 		for (const translation of new_translations.translations) {
 			const normalized_translation = this.normalize_sent_translation_data(translation);
 			const insert_key = translation.text.toLowerCase();
-			if (insert_key === "default" || insert_key === "current") throw new Error("add_translations: Can't redefine `" + insert_key + "` as a translation. This built-in translation can't be redefined");
+			if (insert_key === DEFAULT_SYSTEM || insert_key === CURRENT_SYSTEM) throw new Error("add_translations: Can't redefine `" + insert_key + "` as a translation. This built-in translation can't be redefined");
 			const system = normalized_translation.system;
-			if (system !== "default" && this.parent.translations.systems[normalized_translation.system] == null) if (new_translations.systems != null && new_translations.systems[system] != null) this.add_system(normalized_translation.system, new_translations.systems[system]);
+			if (system !== DEFAULT_SYSTEM && this.parent.translations.systems[normalized_translation.system] == null) if (new_translations.systems != null && new_translations.systems[system] != null) this.add_system(normalized_translation.system, new_translations.systems[system]);
 			else {
 				let valid_systems = Object.keys(this.parent.translations.systems);
-				valid_systems = valid_systems.filter((system2) => system2 !== "current");
-				throw new Error("add_translations: Unknown translation `system`: `" + system + "`. Valid `system`s are: `" + Object.keys(valid_systems).join("`, `") + "`. You may want to check that you included this system in `systems`");
+				valid_systems = valid_systems.filter((system2) => system2 !== CURRENT_SYSTEM);
+				throw new Error("add_translations: Unknown translation `system`: `" + system + "`. Valid `system`s are: `" + valid_systems.join("`, `") + "`. You may want to check that you included this system in `systems`");
 			}
-			else if (system === "current") throw new Error("add_translations: Can't use `" + system + "` as a versification system for a new translation");
+			else if (system === CURRENT_SYSTEM) throw new Error("add_translations: Can't use `" + system + "` as a versification system for a new translation");
 			if (normalized_translations[insert_key] != null || this.parent.translations.aliases[insert_key] != null) {
 				if (this.parent.options.warn_level === "warn") console.warn("add_translations: `" + translation.text + "` already exists. You probably only want to do this if the old definition was wrong");
 			} else texts_for_regexp.push(translation.text);
@@ -4453,12 +4515,12 @@ var bcv_translations_manager = class {
 		}
 		if (texts_for_regexp.length > 0) this.add_new_translations_regexp(texts_for_regexp, new_translations);
 		this.parent.translations.aliases = {
-			...normalized_translations,
-			...this.parent.translations.aliases
+			...this.parent.translations.aliases,
+			...normalized_translations
 		};
 	}
 	apply_case_sensitive(case_sensitive) {
-		const flags = case_sensitive.includes("translations") ? "g" : "gi";
+		const flags = this.get_translation_regexp_flags(case_sensitive);
 		for (const [i, translation] of this.parent.regexps.translations.entries()) this.parent.regexps.translations[i] = new RegExp(translation.source, flags);
 	}
 	normalize_sent_translation_data(translation) {
@@ -4467,11 +4529,11 @@ var bcv_translations_manager = class {
 		if (text.match(/^\p{N}+$/u)) throw new Error("add_translations: A translation.text (`" + text + "`) can't be all numbers because then it would conflict with chapter and verse references.");
 		return {
 			osis: typeof translation.osis === "string" && translation.osis !== "" ? translation.osis : translation.text.toUpperCase(),
-			system: typeof translation.system === "string" && translation.system.length > 0 ? translation.system : "default"
+			system: typeof translation.system === "string" && translation.system.length > 0 ? translation.system : DEFAULT_SYSTEM
 		};
 	}
 	add_system(system, new_system) {
-		if (system === "default" || system === "current") throw new Error("add_translations: Can't use `" + system + "` as a versification system. This built-in system can't be redefined");
+		if (system === DEFAULT_SYSTEM || system === CURRENT_SYSTEM) throw new Error("add_translations: Can't use `" + system + "` as a versification system. This built-in system can't be redefined");
 		if (new_system == null || new_system.books == null && new_system.chapters == null) throw new Error("add_translations: The system object should contain `books` key, a `chapters` key or both");
 		if (this.parent.translations.systems[system] != null) return;
 		const out = {};
@@ -4507,8 +4569,8 @@ var bcv_translations_manager = class {
 		const all_books = this.parent.translations.systems.default.order;
 		for (const [book, chapter_lengths] of Object.entries(chapters)) {
 			if (all_books[book] == null) throw new Error("add_translations: Unexpected book: " + book);
-			if (!Array.isArray(chapter_lengths) || chapter_lengths.length == 0) throw new Error("add_translations: Each value in `chapters` should be an array with at least one entry containing the number of verses in each chapter. Check `" + book + "`");
-			for (const verse_count of chapter_lengths) if (!(typeof verse_count === "number" && verse_count >= 1 && verse_count <= 200)) throw new Error("add_translations: Unexpected value in `chapters`: " + verse_count + "`. It should be a number between 1 and 200");
+			if (!Array.isArray(chapter_lengths) || chapter_lengths.length === 0) throw new Error("add_translations: Each value in `chapters` should be an array with at least one entry containing the number of verses in each chapter. Check `" + book + "`");
+			for (const verse_count of chapter_lengths) if (!(typeof verse_count === "number" && verse_count >= 1 && verse_count <= 200)) throw new Error("add_translations: Unexpected value in `chapters`: `" + verse_count + "`. It should be a number between 1 and 200");
 		}
 	}
 	add_new_translations_regexp(texts_for_regexp, new_translations) {
@@ -4516,30 +4578,25 @@ var bcv_translations_manager = class {
 		const insert_at = new_translations.insert_at === "end" ? "end" : "start";
 		const pre_regexp = new_translations?.pre_regexp instanceof RegExp ? new_translations?.pre_regexp : { source: "" };
 		const post_regexp = new_translations?.post_regexp instanceof RegExp ? new_translations?.post_regexp : /(?![\p{L}\p{N}])/u;
-		const flags = this.parent.options.case_sensitive.includes("translations") ? "g" : "gi";
+		const flags = this.get_translation_regexp_flags();
 		const regexp = new RegExp(pre_regexp.source + "(" + texts_for_regexp.map((translation) => translation.replace(/([$\\.*+?()\[\]{}|^])/g, "\\$1")).join("|") + ")" + post_regexp.source, flags);
 		if (insert_at === "start") this.parent.regexps.translations.unshift(regexp);
 		else this.parent.regexps.translations.push(regexp);
 	}
+	get_translation_regexp_flags(case_sensitive = this.parent.options.case_sensitive) {
+		return case_sensitive.includes("translations") ? "g" : "gi";
+	}
 };
 var bcv_parser = class {
-	constructor(lang = null) {
-		this.passage = new bcv_passage();
+	constructor(lang) {
 		this.entities = [];
-		this.options = new bcv_options(this);
-		if (lang == null) {
-			if (typeof grammar === "undefined") throw `When creating a new bcv_parser object using ES Modules, please provide a language object. For example, here's how to provide English:
+		if (lang == null) throw new Error(`When creating a new bcv_parser object using ES Modules, please provide a language object. For example, here's how to provide English:
 import * as lang from "esm/lang/en.js";
-const bcv = new bcv_parser(lang);`;
-			this.translations = new bcv_translations();
-			this.matcher = new bcv_matcher(this, grammar_options);
-			this.regexps = new bcv_regexps();
-			this.translations = new bcv_translations();
-		} else {
-			this.matcher = new bcv_matcher(this, lang.grammar_options);
-			this.regexps = new lang.regexps();
-			this.translations = new lang.translations();
-		}
+const bcv = new bcv_parser(lang);`);
+		this.options = new bcv_options(this);
+		this.matcher = new bcv_matcher(this, lang.grammar_options);
+		this.regexps = new lang.regexps();
+		this.translations = new lang.translations();
 		this.passage = new bcv_passage(this.options, this.translations);
 		this.regexps_manager = new bcv_regexps_manager(this);
 		this.translations_manager = new bcv_translations_manager(this);
@@ -4574,14 +4631,14 @@ const bcv = new bcv_parser(lang);`;
 	reset() {
 		this.entities = [];
 		this.passage.books = [];
-		this.passage.indices = {};
+		this.passage.indices = [];
 	}
 	set_options(options) {
 		if (options.include_apocrypha != null) {
 			this.include_apocrypha(options.include_apocrypha);
 			delete options.include_apocrypha;
 		}
-		for (const [key, value] of Object.entries(options)) if (key in this.options) this.options[key] = value;
+		for (const [key, value] of Object.entries(options)) if (key in this.options) Reflect.set(this.options, key, value);
 		return this;
 	}
 	include_apocrypha(arg) {
@@ -4616,7 +4673,7 @@ const bcv = new bcv_parser(lang);`;
 	}
 	parsed_entities() {
 		let out = [];
-		this.entities.forEach((entity, entity_id) => {
+		structuredClone(this.entities).forEach((entity, entity_id) => {
 			if (entity.type && entity.type === "translation_sequence" && out.length > 0 && entity_id === out[out.length - 1].entity_id + 1) out[out.length - 1].indices[1] = entity.absolute_indices[1];
 			if (entity.passages == null) return;
 			if (entity.type === "b" && this.options.book_alone_strategy === "ignore" || entity.type === "b_range" && this.options.book_range_strategy === "ignore" || entity.type === "context") return;
@@ -4653,9 +4710,11 @@ const bcv = new bcv_parser(lang);`;
 	}
 	parse_entity_passages(entity, entity_id, translations, system) {
 		const osises = [];
-		const length = entity.passages.length;
+		const passages = entity.passages;
+		if (passages == null || passages.length === 0) return osises;
+		const length = passages.length;
 		const include_old_testament = this.options.testaments.indexOf("o") >= 0;
-		entity.passages.forEach((passage, i) => {
+		passages.forEach((passage, i) => {
 			if (!passage.type) passage.type = entity.type;
 			if (passage.valid.valid === false) {
 				if (this.options.invalid_sequence_strategy === "ignore" && entity.type === "sequence") this.snap_sequence("ignore", entity, osises, i, length);
@@ -4665,8 +4724,8 @@ const bcv = new bcv_parser(lang);`;
 				this.snap_sequence("book", entity, osises, i, length);
 				return;
 			}
-			if (include_old_testament === false && passage.start.b === "Ps" && passage.start.c != null && passage.start.c < 151 && passage.end.b === "Ps" && passage.end.c != null && passage.end.c < 151) return;
 			if ((passage.type === "b_range_start" || passage.type === "range_end_b") && this.options.book_range_strategy === "ignore") this.snap_range(entity, i);
+			if (include_old_testament === false && passage.start.b === "Ps" && passage.start.c != null && passage.start.c < 151 && passage.end.b === "Ps" && passage.end.c != null && passage.end.c < 151) return;
 			if (!passage.absolute_indices) passage.absolute_indices = [...entity.absolute_indices];
 			osises.push({
 				osis: passage.valid.valid ? this.to_osis(passage.start, passage.end, system) : "",
@@ -4691,18 +4750,23 @@ const bcv = new bcv_parser(lang);`;
 		if (start.c == null) start.c = 1;
 		if (start.v == null) start.v = 1;
 		if (this.options.versification_system.includes("a") && this.options.ps151_strategy === "b" && (start.c === 151 && start.b === "Ps" || end.c === 151 && end.b === "Ps")) this.fix_ps151(start, end, translation);
-		const chapter_array = this.passage.translations.systems[translation]?.chapters[end.b] || this.passage.translations.systems.current.chapters[end.b];
+		const chapter_array = this.passage.translations.systems[translation]?.chapters?.[end.b] || this.passage.translations.systems.current.chapters[end.b];
 		const compaction_strategy = this.options.osis_compaction_strategy;
 		const existence_strategy = this.options.passage_existence_strategy;
 		if (end.c == null) if (existence_strategy.includes("c") || chapter_array && chapter_array.length === 1) end.c = chapter_array.length;
 		else end.c = 999;
-		if (end.v == null) if (chapter_array && chapter_array[end.c - 1] && existence_strategy.includes("v")) end.v = chapter_array[end.c - 1];
-		else end.v = 999;
+		if (end.v == null) {
+			const end_chapter2 = end.c ?? 1;
+			if (chapter_array && chapter_array[end_chapter2 - 1] && existence_strategy.includes("v")) end.v = chapter_array[end_chapter2 - 1];
+			else end.v = 999;
+		}
+		const end_chapter = end.c ?? 1;
+		const end_chapter_verse_count = chapter_array?.[end_chapter - 1];
 		const get_partial = compaction_strategy.includes("p") && (start.p != null || end.p != null);
-		if ((compaction_strategy === "b" || compaction_strategy === "bp") && start.c === 1 && start.v === 1 && get_partial === false && (end.c === 999 && end.v === 999 || end.c === chapter_array.length && existence_strategy.includes("c") && (end.v === 999 || end.v === chapter_array[end.c - 1] && existence_strategy.includes("v")))) {
+		if ((compaction_strategy === "b" || compaction_strategy === "bp") && start.c === 1 && start.v === 1 && get_partial === false && (end.c === 999 && end.v === 999 || end.c === chapter_array?.length && existence_strategy.includes("c") && (end.v === 999 || end.v === end_chapter_verse_count && existence_strategy.includes("v")))) {
 			osis.start = start.b;
 			osis.end = end.b;
-		} else if (start.v === 1 && get_partial === false && compaction_strategy.includes("v") === false && (end.v === 999 || end.v === chapter_array[end.c - 1] && existence_strategy.includes("v"))) {
+		} else if (start.v === 1 && get_partial === false && compaction_strategy.includes("v") === false && (end.v === 999 || end.v === end_chapter_verse_count && existence_strategy.includes("v"))) {
 			osis.start = start.b + "." + start.c;
 			osis.end = end.b + "." + end.c;
 		} else {
@@ -4774,6 +4838,16 @@ const bcv = new bcv_parser(lang);`;
 					has_enclosed = true;
 				}
 				if (this.is_verse_consecutive(prev, osis.start, translation)) {
+					const previous_osis = out[prev_i];
+					if (previous_osis == null || previous_osis.start == null || previous_osis.enclosed_indices == null) {
+						out.push(osis);
+						prev = {
+							b: osis.end.b,
+							c: osis.end.c,
+							v: osis.end.v
+						};
+						return;
+					}
 					out[prev_i].end = osis.end;
 					out[prev_i].is_enclosed_last = is_enclosed_last;
 					out[prev_i].indices[1] = osis.indices[1];
@@ -4794,14 +4868,14 @@ const bcv = new bcv_parser(lang);`;
 		return out;
 	}
 	snap_enclosed_indices(osises) {
-		for (const osis of osises) if (osis.is_enclosed_last != null) {
+		for (const osis of osises) if (osis.is_enclosed_last != null && osis.enclosed_indices != null) {
 			if (osis.enclosed_indices[0] < 0 && osis.is_enclosed_last) osis.indices[1] = osis.enclosed_indices[1];
 			delete osis.is_enclosed_last;
 		}
 		return osises;
 	}
 	is_verse_consecutive(prev, check, translation) {
-		if (!prev.b) return false;
+		if (!prev.b || prev.c == null || prev.v == null || check.c == null || check.v == null) return false;
 		const translation_order = this.passage.translations.systems[translation]?.order || this.passage.translations.systems.current.order;
 		const chapter_array = this.passage.translations.systems[translation]?.chapters?.[prev.b] || this.passage.translations.systems.current.chapters[prev.b];
 		if (prev.b === check.b) {
@@ -4814,24 +4888,18 @@ const bcv = new bcv_parser(lang);`;
 		return false;
 	}
 	snap_range(entity, passage_i) {
+		const passages = entity.passages;
+		if (passages == null || passages.length === 0) return entity;
 		let entity_i = 0;
 		let source_entity = "start";
 		let type = "range_end_b";
-		if (entity.original_type === "b_range_start") {
-			entity.type = entity.original_type;
-			delete entity.original_type;
-		}
-		if (entity.type === "b_range_start" || entity.type === "sequence" && entity.passages[passage_i].type === "b_range_start") {
+		if (entity.type === "b_range_start" || entity.type === "sequence" && passages[passage_i].type === "b_range_start") {
 			entity_i = 1;
 			source_entity = "end";
 			type = "b_range_start";
 		}
 		const target_entity = source_entity === "end" ? "start" : "end";
-		for (const obj_type of [source_entity, target_entity]) if (entity.passages[passage_i][obj_type].original_object != null) entity.passages[passage_i][obj_type] = entity.passages[passage_i][obj_type].original_object;
-		const original_target = structuredClone(entity.passages[passage_i][target_entity]);
-		entity.passages[passage_i][target_entity] = structuredClone(entity.passages[passage_i][source_entity]);
-		entity.passages[passage_i][target_entity].original_object = original_target;
-		entity.passages[passage_i][source_entity].original_object = structuredClone(entity.passages[passage_i][source_entity]);
+		passages[passage_i][target_entity] = structuredClone(passages[passage_i][source_entity]);
 		if (entity.type === "sequence") {
 			if (passage_i >= entity.value.length) passage_i = entity.value.length - 1;
 			const pluck = this.passage.pluck(type, entity.value[passage_i]);
@@ -4841,19 +4909,31 @@ const bcv = new bcv_parser(lang);`;
 				else entity.absolute_indices[1] = temp.absolute_indices[1];
 			}
 		} else {
+			const target_value = entity.value[entity_i];
+			const absolute_indices = target_value.absolute_indices ?? entity.absolute_indices;
 			entity.original_type = entity.type;
-			entity.type = entity.value[entity_i].type;
-			entity.absolute_indices = [entity.value[entity_i].absolute_indices[0], entity.value[entity_i].absolute_indices[1]];
+			entity.type = target_value.type;
+			entity.absolute_indices = [absolute_indices[0], absolute_indices[1]];
 		}
 		return entity;
 	}
 	snap_sequence(type, entity, osises, i, length) {
-		const passage = entity.passages[i];
-		if (passage.absolute_indices[0] === entity.absolute_indices[0] && i < length - 1 && this.get_snap_sequence_i(entity.passages, i, length) !== i) {
-			entity.absolute_indices[0] = entity.passages[i + 1].absolute_indices[0];
-			this.remove_absolute_indices(entity.passages, i + 1);
-		} else if (passage.absolute_indices[1] === entity.absolute_indices[1] && i > 0) entity.absolute_indices[1] = osises.length > 0 ? osises[osises.length - 1].indices[1] : entity.passages[i - 1].absolute_indices[1];
-		else if (type === "book" && i < length - 1 && !this.starts_with_book(entity.passages[i + 1])) entity.passages[i + 1].absolute_indices[0] = passage.absolute_indices[0];
+		const passages = entity.passages;
+		if (passages == null || passages.length === 0) return;
+		const passage = passages[i];
+		if (passage == null || passage.absolute_indices == null) return;
+		if (passage.absolute_indices[0] === entity.absolute_indices[0] && i < length - 1 && this.get_snap_sequence_i(passages, i, length) !== i) {
+			const next_absolute_indices = passages[i + 1]?.absolute_indices;
+			if (next_absolute_indices == null) return;
+			entity.absolute_indices[0] = next_absolute_indices[0];
+			this.remove_absolute_indices(passages, i + 1);
+		} else if (passage.absolute_indices[1] === entity.absolute_indices[1] && i > 0) {
+			const previous_absolute_indices = passages[i - 1]?.absolute_indices;
+			entity.absolute_indices[1] = osises.length > 0 ? osises[osises.length - 1].indices[1] : previous_absolute_indices?.[1] ?? entity.absolute_indices[1];
+		} else if (type === "book" && i < length - 1 && !this.starts_with_book(passages[i + 1])) {
+			const next_absolute_indices = passages[i + 1].absolute_indices;
+			if (next_absolute_indices != null) next_absolute_indices[0] = passage.absolute_indices[0];
+		}
 	}
 	get_snap_sequence_i(passages, passage_i, length) {
 		for (let i = passage_i + 1; i < length; i++) {
@@ -4863,44 +4943,47 @@ const bcv = new bcv_parser(lang);`;
 		return passage_i;
 	}
 	starts_with_book(passage) {
-		if (passage.type.substring(0, 1) === "b") return true;
+		if (passage.type?.substring(0, 1) === "b") return true;
 		if ((passage.type === "range" || passage.type === "ff") && passage.start && passage.start.type && passage.start.type.substring(0, 1) === "b") return true;
 		return false;
 	}
 	remove_absolute_indices(passages, passage_i) {
-		if (passages[passage_i].enclosed_absolute_indices[0] < 0) return;
-		const [start, end] = passages[passage_i].enclosed_absolute_indices;
-		passages.length;
-		for (const passage of passages.slice(passage_i)) if (passage.enclosed_absolute_indices[0] === start && passage.enclosed_absolute_indices[1] === end) passage.enclosed_absolute_indices = [-1, -1];
-		else break;
+		const enclosed_indices = passages[passage_i]?.enclosed_absolute_indices;
+		if (enclosed_indices == null || enclosed_indices[0] < 0) return;
+		const [start, end] = enclosed_indices;
+		for (const passage of passages.slice(passage_i)) {
+			const passage_enclosed = passage.enclosed_absolute_indices;
+			if (passage_enclosed != null && passage_enclosed[0] === start && passage_enclosed[1] === end) passage.enclosed_absolute_indices = [-1, -1];
+			else break;
+		}
 	}
 	add_books(books) {
-		return this.regexps_manager.add_books(books);
+		this.regexps_manager.add_books(books);
 	}
 	add_translations(translations) {
-		return this.translations_manager.add_translations(translations);
+		this.translations_manager.add_translations(translations);
 	}
 };
 //#endregion
-//#region node_modules/.pnpm/bible-passage-reference-parser@3.2.0/node_modules/bible-passage-reference-parser/esm/lang/en.js
+//#region node_modules/.pnpm/bible-passage-reference-parser@4.0.0/node_modules/bible-passage-reference-parser/esm/lang/en.js
 var en_exports = /* @__PURE__ */ __exportAll({
-	grammar_options: () => grammar_options$1,
+	grammar_options: () => grammar_options,
 	regexps: () => regexps,
 	translations: () => translations
 });
-var bcv_regexps$1 = class {
+var bcv_regexps = class {
 	constructor() {
 		this.books = [];
-		this.languages = ["en"];
+		this.languages = ["eng"];
 		this.translations = [/(?:N(?:RSVUE|ABRE|ASB|IV|[EL]T)|N(?:RSV|A[BS])|HCSB|(?:N(?:IR|KJ)|AS|E[RS]|KJ|RS)V|TNIV|AMP|CE[BV]|LXX|MSG|CSB)\b/gi];
-		this.escaped_passage = /(?:^|[^\x1e\x1f\p{L}\p{N}])((?:(?:ch(?:apters?|a?pts?\.?|a?p?s?\.?)?\s*\d+\s*(?:[\u2013\u2014\-]|through|thru|to)\s*\d+\s*(?:from|of|in)(?:\s+the\s+book\s+of)?\s*)|(?:ch(?:apters?|a?pts?\.?|a?p?s?\.?)?\s*\d+\s*(?:from|of|in)(?:\s+the\s+book\s+of)?\s*)|(?:\d+(?:th|nd|st)\s*ch(?:apter|a?pt\.?|a?p?\.?)?\s*(?:from|of|in)(?:\s+the\s+book\s+of)?\s*))?\x1f(\d+)(?:\/\d+)?\x1f(?:\/\d+\x1f|[\d\s.:,;\x1e\x1f&\(\)（）\[\]\\/"'\*=~\-–—]|title(?![a-z])|ff(?![a-z0-9])|f(?![a-z0-9])|see\s+also|chapters|chapter|through|compare|chapts|verses|chpts|chapt|chaps|verse|chap|thru|also|chp|chs|cha|and|see|ver|vss|ch|to|cf|vs|vv|v|[a-e](?!\w)|$)+)/giu;
-		this.match_end_split = /\d\W*title|\d\W*(?:ff(?![a-z0-9])|f(?![a-z0-9]))(?:[\s*]*\.)?|\d[\s*]*[a-e](?!\w)|\x1e(?:[\s*]*[)\]\uff09])?|[\d\x1f]/gi;
+		this.first = /(?:1st\.?\s*|1\.?\s*|I\.?\s*|First\.?\s*)/;
+		this.second = /(?:2nd\.?\s*|2\.?\s*|II\.?\s*|Second\.?\s*)/;
+		this.third = /(?:3rd\.?\s*|3\.?\s*|III\.?\s*|Third\.?\s*)/;
+		this.range_and = /(?:[&\u2013\u2014-]|(?:and\.?\s*|compare\.?\s*|cf\.?\s*|cf\.?\s*|see\s*also\.?\s*|also\.?\s*|see\.?\s*)|(?:through\.?\s*|thru\.?\s*|to\.?\s*))/;
+		this.range_only = /(?:[\u2013\u2014-]|(?:through\.?\s*|thru\.?\s*|to\.?\s*))/;
+		this.match_end_split = /\d\W*(?:title)|\d\W*(?:(?:ff?(?![a-z0-9])))(?:[\s*]*\.)?|\d[\s*]*(?:(?:[a-e](?!\w)))|\x1e(?:[\s*]*[)\]\uff09])?|[\d\x1f]/gi;
 		this.control = /[\x1e\x1f]/g;
-		this.first = /(?:1st|1|I|First)\.?\s*/;
-		this.second = /(?:2nd|2|II|Second)\.?\s*/;
-		this.third = /(?:3rd|3|III|Third)\.?\s*/;
-		this.range_and = /(?:[&\u2013\u2014-]|(?:and|compare|cf|see\s+also|also|see)|(?:through|thru|to))/;
-		this.range_only = /(?:[\u2013\u2014-]|(?:through|thru|to))/;
+		this.escaped_passage = /(?:^|[^\x1e\x1f\p{L}\p{N}])((?:(?:ch(?:apters?|a?pts?\.?|a?p?s?\.?)?\s*\d+\s*(?:[\u2013\u2014\-]|through|thru|to)\s*\d+\s*(?:from|of|in)(?:\s+the\s+book\s+of)?\s*)|(?:ch(?:apters?|a?pts?\.?|a?p?s?\.?)?\s*\d+\s*(?:from|of|in)(?:\s+the\s+book\s+of)?\s*)|(?:\d+(?:th|nd|st)\s*ch(?:apter|a?pt\.?|a?p?\.?)?\s*(?:from|of|in)(?:\s+the\s+book\s+of)?\s*))?\x1f(\d+)(?:\/\d+)?\x1f(?:\/\d+\x1f|[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—]|title\.?\s*(?![a-z])|(?:(?:ch(?:ap(?:t(?:er)?s|s)|a(?:p(?:t(?:er)?)?)?|pts|p|s)?\.?\s*)|(?:v(?:er(?:ses?)?|ss?|v)?\.?\s*)|(?:ff?\.?\s*(?![a-z0-9]))|(?:(?:see(?:\s*also)?|c(?:ompare|f)|also|and)\.?\s*)|(?:t(?:hr(?:ough|u)|o)\.?\s*))|(?:[a-e]\.?\s*(?!\w))(?!\w)|$)+)/giu;
 		this.pre_book = /(?:^|(?<=[^\p{L}]))/gu;
 		this.pre_number_book = /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))/gu;
 		this.post_book = /(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/gu;
@@ -4914,449 +4997,784 @@ var bcv_regexps$1 = class {
 			{
 				osis: ["Gen"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(G(?:en(?:n(?:(?:eis[eiu]|si)s|ees[eiu]s|i(?:[ei]s[eiu]s|s[eiu]s)|es[eiu]s)|(?:e(?:is[eiu]|su)|si)s|ees[eiu]s|i(?:[ei]s[eiu]s|s[eiu]s)|es[ei]s)|e(?:n(?:neis|es[ei]|eis)?)?|n))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(G(?:en(?:n(?:(?:eis[eiu]|si)s|ees[eiu]s|i(?:[ei]s[eiu]s|s[eiu]s)|es[eiu]s)|(?:e(?:is[eiu]|su)|si)s|ees[eiu]s|i(?:[ei]s[eiu]s|s[eiu]s)|es[ei]s)|e(?:n(?:neis|es[ei]|eis)?)?|n))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Exod"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(Ex(?:o(?:d(?:[iu]s|[es])?)?|d)?)(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Ex(?:o(?:d(?:[iu]s|[es])?)?|d)?)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Bel"],
 				testament: "a",
-				regexp: /(?:^|(?<=[^\p{L}]))(Bel(?:\s*(?:and\s*(?:the\s*(?:S(?:erpent|nake)|Dragon)|S(?:erpent|nake)|Dragon)|&\s*(?:the\s*(?:S(?:erpent|nake)|Dragon)|S(?:erpent|nake)|Dragon)))?)(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Bel(?:\s*(?:and\s*(?:the\s*(?:S(?:erpent|nake)|Dragon)|S(?:erpent|nake)|Dragon)|&\s*(?:the\s*(?:S(?:erpent|nake)|Dragon)|S(?:erpent|nake)|Dragon)))?)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Lev"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(L(?:evit(?:[ei])?cus|evet(?:[ei])?cus|iv[ei]t(?:[ei])?cus|e(?:vi?)?|v))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(L(?:evit(?:[ei])?cus|evet(?:[ei])?cus|iv[ei]t(?:[ei])?cus|e(?:vi?)?|v))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Num"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(N(?:u(?:m(?:b(?:ers?)?)?)?|m))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(N(?:u(?:m(?:b(?:ers?)?)?)?|m))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Sir"],
 				testament: "a",
-				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Wisdom\s*of\s*Jesus(?:,\s*Son\s*of|\s*(?:Son\s*of|ben))\s*Sirach|Wisdom\s*of\s*Jesus(?:,\s*Son\s*of|\s*(?:Son\s*of|ben))\s*Sirach|Ecc(?:l[eu]siasticus|s)|Ben\s*Sira|Ecclus|Sirach|Sir))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Wisdom\s*of\s*Jesus(?:,\s*Son\s*of|\s*(?:Son\s*of|ben))\s*Sirach|Wisdom\s*of\s*Jesus(?:,\s*Son\s*of|\s*(?:Son\s*of|ben))\s*Sirach|Ecc(?:l[eu]siasticus|s)|Ben\s*Sira|Ecclus|Sirach|Sir))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Wis"],
 				testament: "a",
-				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Wis(?:d?om|d?)\s*of\s*Solomon|Wis(?:d(?:om)?\s*|\s*)of\s*Solomon|Wisom\s*of\s*Solomon|Wis(?:d(?:om)?)?))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Wis(?:d?om|d?)\s*of\s*Solomon|Wis(?:dom)?\s*of\s*Solomon|Wisom\s*of\s*Solomon|W(?:isd\s*of\s*Solomon|(?:(?:isd\.?\s*Sol|S)|is(?:d(?:om)?)?))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Lam"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(L(?:am[ei]ntations|a(?:m(?:[ei]ntation)?)?|m))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(L(?:am[ei]ntations|a(?:m(?:[ei]ntation)?)?|m))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["EpJer"],
 				testament: "a",
-				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*(?:(?:Ep(?:istle|\.)|Ep)\s*of\s*Jeremiah|Let(?:ter|\.?)\s*of\s*Jeremiah)|Ep(?:(?:(?:istle\s*of\s*Jeremiah|(?:istle\s*of\s*Jeremy|\s*?Jer))|\s*of\s*Jeremiah)|\.\s*of\s*Jeremiah)|Let(?:ter|\.?)\s*of\s*Jeremiah))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*(?:(?:Ep(?:istle|\.)|Ep)\s*of\s*Jeremiah|Let(?:ter|\.?)\s*of\s*Jeremiah)|Ep(?:istle\s*of\s*Jeremiah|(?:istle\s*of\s*Jeremy|(?:\.\s*|\s*?)Jer))|Let(?:ter|\.?)\s*of\s*Jeremiah|Ep\.?\s*of\s*Jeremiah))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Rev"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}]))(R(?:ev(?:e?|[ao])lations|e(?:v(?:elation|[ao]lation|lation|el)?)?|v))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(R(?:ev(?:e?|[ao])lations|e(?:v(?:elation|[ao]lation|lation|el)?)?|v))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["PrMan"],
 				testament: "a",
-				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Pr(?:ayer(?:s\s*(?:of\s*)?Manasseh|\s*(?:of\s*)?Manasseh)|\s*(?:of\s*)?Manasseh)|Prayer(?:s\s*(?:of\s*)?Manasseh|\s*(?:of\s*)?Manasseh)|Pr\s*of\s*Manasseh|Pr\s*Manasseh|Pr\s*?Man))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Pr(?:ayer(?:s\s*(?:of\s*)?Manasseh|\s*(?:of\s*)?Manasseh)|\s*(?:of\s*)?Manasseh)|Pr(?:ayer(?:s\s*(?:of\s*)?Manasseh|\s*(?:of\s*)?Manasseh)|(?:\s*of\s*Manasseh|(?:\s*Manasseh|(?:(?:\.\s*)?Man|(?:\s*Man|M)))))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Deut"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(D(?:eut[eo]rono?my|eet(?:[eo]rono?my|rono?my)|u(?:et[eo]rono?my|ut(?:[eo]rono?my|rono?my)|et(?:rono?my)?)|eutrono?my|eut?|t))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(D(?:eut[eo]rono?my|eet(?:[eo]rono?my|rono?my)|u(?:et[eo]rono?my|ut(?:[eo]rono?my|rono?my)|et(?:rono?my)?)|eutrono?my|eut?|t))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Josh"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(J(?:o(?:(?:ush?ua|sh?ua)|sh?)|sh))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(J(?:o(?:(?:ush?ua|sh?ua)|sh?)|sh))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Judg"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(J(?:udg(?:es)?|d?gs|d?g))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(J(?:udg(?:es)?|d?gs|d?g))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Ruth"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(R(?:u(?:th?)?|th?))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(R(?:u(?:th?)?|th?))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["1Esd"],
 				testament: "a",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First\s*Esd(?:r(?:as)?)?|(?:(?:1st|I)|1)\.\s*Esd(?:r(?:as)?)?|(?:(?:1st|I)|1)\s*Esd(?:r(?:as)?)?|1Esd))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First(?:\.\s*Esd(?:r(?:as)?)?|\s*Esd(?:r(?:as)?)?)|1st(?:\.\s*Esd(?:r(?:as)?)?|\s*Esd(?:r(?:as)?)?)|1(?:\.\s*Esd(?:r(?:as)?)?|\s*Esd(?:r(?:as)?)?)|I(?:\.\s*Esd(?:r(?:as)?)?|\s*Esd(?:r(?:as)?)?)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["2Esd"],
 				testament: "a",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second\s*Esd(?:r(?:as)?)?|(?:2(?:nd)?|II)\.\s*Esd(?:r(?:as)?)?|(?:2(?:nd)?|II)\s*Esd(?:r(?:as)?)?|2Esd))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second(?:\.\s*Esd(?:r(?:as)?)?|\s*Esd(?:r(?:as)?)?)|2nd(?:\.\s*Esd(?:r(?:as)?)?|\s*Esd(?:r(?:as)?)?)|II(?:\.\s*Esd(?:r(?:as)?)?|\s*Esd(?:r(?:as)?)?)|2(?:\.\s*Esd(?:r(?:as)?)?|\s*Esd(?:r(?:as)?)?)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Esd"],
+				testament: "a",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(1(?:\s*Esd(?:ras)?|Esd?))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Esd"],
+				testament: "a",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(2(?:\s*Esd(?:ras)?|Esd?))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Isa"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(I(?:s(?:ai[ai](?:[ai])?ha|aa(?:[ai](?:[ai])?ha|ha)|i(?:[ai](?:[ai](?:[ai])?ha|ha)|ha)|ai[ai](?:[ai])?h|aa(?:[ai](?:[ai])?h|h)|i[ai](?:[ai](?:[ai])?h|h)|(?:aish|ai?h)a|aish|ai?h|sah|ai?)?|a))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
-			},
-			{
-				osis: ["2Sam"],
-				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second\s*(?:Kingdoms|S(?:(?:amu[ae]l[ls]|ma)|(?:a(?:m(?:u[ae]l)?)?|m)))|(?:2(?:nd)?|II)\.\s*(?:Kingdoms|S(?:(?:amu[ae]l[ls]|ma)|(?:a(?:m(?:u[ae]l)?)?|m)))|(?:2nd|II)\s*(?:Kingdoms|S(?:(?:amu[ae]l[ls]|ma)|(?:a(?:m(?:u[ae]l)?)?|m)))|2(?:\s*Kingdoms|(?:(?:(?:\s*Samu[ae]l[ls]|Sam)|\s*Sma)|\s*S(?:(?:a(?:m(?:u[ae]l)?)?)?|m)))))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(I(?:s(?:ai[ai](?:[ai])?ha|aa(?:[ai](?:[ai])?ha|ha)|i(?:[ai](?:[ai](?:[ai])?ha|ha)|ha)|ai[ai](?:[ai])?h|aa(?:[ai](?:[ai])?h|h)|i[ai](?:[ai](?:[ai])?h|h)|(?:aish|ai?h)a|aish|ai?h|sah|ai?)?|a))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["1Sam"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First\s*(?:Kingdoms|S(?:(?:amu[ae]l[ls]|ma)|(?:a(?:m(?:u[ae]l)?)?|m)))|(?:(?:1st|I)|1)\.\s*(?:Kingdoms|S(?:(?:amu[ae]l[ls]|ma)|(?:a(?:m(?:u[ae]l)?)?|m)))|(?:1st|I)\s*(?:Kingdoms|S(?:(?:amu[ae]l[ls]|ma)|(?:a(?:m(?:u[ae]l)?)?|m)))|1\s*Kingdoms|1\s*Samu[ae]l[ls]|1\s*Sa(?:m(?:u[ae]l)?)?|Samu[ae]l[ls]|Samu[ae]l|1\s*Sma|1\s*Sm|1Sam|1\s*S))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First(?:\.\s*Samu[ae]l[ls]?|\s*Samu[ae]l[ls]?)|1st(?:\.\s*Samu[ae]l[ls]?|\s*Samu[ae]l[ls]?)|1(?:\.\s*Samu[ae]l[ls]?|\s*Samu[ae]l[ls]?)|I(?:\.\s*Samu[ae]l[ls]?|\s*Samu[ae]l[ls]?)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
-				osis: ["2Kgs"],
+				osis: ["2Sam"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Fourth\s*Kingdoms|(?:4(?:th)?\.|IV\.)\s*Kingdoms|Second\s*K(?:i?ng?s|(?:i?g|i?)s)|(?:4(?:th)?\s*|IV\s*)Kingdoms|Second\s*K(?:i?ng?|i?g|i)?|(?:2(?:nd)?|II)\.\s*K(?:i?ng?s|(?:i?g|i?)s)|(?:2(?:nd)?|II)\.\s*K(?:i?ng?|i?g|i)?|(?:2(?:nd)?|II)\s*K(?:i?ng?s|(?:i?g|i?)s)|(?:2(?:nd)?|II)\s*K(?:i?ng?|i?g|i)?|2Kgs))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second(?:\.\s*Samu[ae]l[ls]?|\s*Samu[ae]l[ls]?)|2nd(?:\.\s*Samu[ae]l[ls]?|\s*Samu[ae]l[ls]?)|II(?:\.\s*Samu[ae]l[ls]?|\s*Samu[ae]l[ls]?)|2(?:\.\s*Samu[ae]l[ls]?|\s*Samu[ae]l[ls]?)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Sam"],
+				testament: "o",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(Samu[ae]l[ls]?)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Sam"],
+				testament: "o",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First\.?\s*Kingdoms|1st\.?\s*Kingdoms|1\.?\s*Kingdoms|I\.?\s*Kingdoms))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Sam"],
+				testament: "o",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second\.?\s*Kingdoms|2nd\.?\s*Kingdoms|II\.?\s*Kingdoms|2\.?\s*Kingdoms))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["1Kgs"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Third\s*Kingdoms|(?:III\.|3(?:rd)?\.)\s*Kingdoms|(?:III\s*|3(?:rd)?\s*)Kingdoms|First\s*K(?:i?ng?s|(?:i?g)?s)|First\s*K(?:i?ng?|i?g|i)?|(?:1(?:st)?\.|I\.)\s*K(?:i?ng?s|(?:i?g)?s)|(?:1(?:st)?\.|I\.)\s*K(?:i?ng?|i?g|i)?|(?:1(?:st)?\s*|I\s*)K(?:i?ng?s|(?:i?g)?s)|(?:1(?:st)?\s*|I\s*)K(?:i?ng?|i?g|i)?|(?:K(?:(?:in)?|n)g|1Kg)s|Kin))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Third\.?\s*Kingdoms|III\.?\s*Kingdoms|3rd\.?\s*Kingdoms|3\.?\s*Kingdoms))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
-				osis: ["2Chr"],
+				osis: ["2Kgs"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second\s*(?:Paralipomenon|C(?:(?:h?oron[io]cles|hr(?:(?:onicals|n)|onicles)|(?:hrono|ron[io])cles)|(?:h?oron[io]cle|hronicle|(?:hrono|ron[io])cle|hr(?:on?)?|ron)))|(?:2(?:nd)?|II)\.\s*(?:Paralipomenon|C(?:(?:h?oron[io]cles|hr(?:(?:onicals|n)|onicles)|(?:hrono|ron[io])cles)|(?:h?oron[io]cle|hronicle|(?:hrono|ron[io])cle|hr(?:on?)?|ron)))|(?:2nd|II)\s*(?:Paralipomenon|C(?:(?:h?oron[io]cles|hr(?:(?:onicals|n)|onicles)|(?:hrono|ron[io])cles)|(?:h?oron[io]cle|hronicle|(?:hrono|ron[io])cle|hr(?:on?)?|ron)))|2\s*Paralipomenon|2\s*Ch?oron[io]cles|2\s*Ch?oron[io]cle|2(?:(?:\s*Chr(?:onicals|n)|Chr)|\s*Chronicles)|2\s*C(?:hrono|ron[io])cles|2\s*C(?:hronicle|(?:h(?:r(?:on?)?)?|ron))|2\s*C(?:hrono|ron[io])cle))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Fourth\.?\s*Kingdoms|4th\.?\s*Kingdoms|IV\.?\s*Kingdoms|4\.?\s*Kingdoms))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Sam"],
+				testament: "o",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First(?:\.\s*S(?:am?|ma?)|\s*S(?:am?|ma?))|1st(?:\.\s*S(?:am?|ma?)|\s*S(?:am?|ma?))|1(?:\.\s*S(?:am?|ma?)|\s*S(?:am?|ma?))|I(?:\.\s*S(?:am?|ma?)|\s*S(?:am?|ma?))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Sam"],
+				testament: "o",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second(?:\.\s*S(?:am?|ma?)|\s*S(?:am?|ma?))|2nd(?:\.\s*S(?:am?|ma?)|\s*S(?:am?|ma?))|II(?:\.\s*S(?:am?|ma?)|\s*S(?:am?|ma?))|2(?:\.\s*S(?:am?|ma?)|\s*S(?:am?|ma?))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Sam"],
+				testament: "o",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(2(?:\s*S(?:amuel|(?:am?)?)|Sam))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Sam"],
+				testament: "o",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(1(?:\s*S(?:amuel|(?:am?)?)|Sam))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Kgs"],
+				testament: "o",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First(?:\.\s*K(?:(?:in)?gs|ngs|in)|\s*K(?:(?:in)?gs|ngs|in))|1st(?:\.\s*K(?:(?:in)?gs|ngs|in)|\s*K(?:(?:in)?gs|ngs|in))|1(?:\.\s*K(?:(?:in)?gs|ngs|in)|\s*K(?:(?:in)?gs|ngs|in))|I(?:\.\s*K(?:(?:in)?gs|ngs|in)|\s*K(?:(?:in)?gs|ngs|in))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Kgs"],
+				testament: "o",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second(?:\.\s*K(?:(?:in)?gs|ngs|in)|\s*K(?:(?:in)?gs|ngs|in))|2nd(?:\.\s*K(?:(?:in)?gs|ngs|in)|\s*K(?:(?:in)?gs|ngs|in))|II(?:\.\s*K(?:(?:in)?gs|ngs|in)|\s*K(?:(?:in)?gs|ngs|in))|2(?:\.\s*K(?:(?:in)?gs|ngs|in)|\s*K(?:(?:in)?gs|ngs|in))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Kgs"],
+				testament: "o",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(K(?:(?:in)?gs|ngs|in))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Kgs"],
+				testament: "o",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First(?:\.\s*K(?:i(?:g?s|n[gs])|ig?|n[gs]|n|[gs])?|\s*K(?:i(?:g?s|n[gs])|ig?|n[gs]|n|[gs])?)|1st(?:\.\s*K(?:i(?:g?s|n[gs])|ig?|n[gs]|n|[gs])?|\s*K(?:i(?:g?s|n[gs])|ig?|n[gs]|n|[gs])?)|1(?:\.\s*K(?:i(?:g?s|n[gs])|ig?|n[gs]|n|[gs])?|\s*K(?:i(?:g?s|n[gs])|ig?|n[gs]|n|[gs])?)|I(?:\.\s*K(?:i(?:g?s|n[gs])|ig?|n[gs]|n|[gs])?|\s*K(?:i(?:g?s|n[gs])|ig?|n[gs]|n|[gs])?)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Kgs"],
+				testament: "o",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second(?:\.\s*K(?:i(?:g?s|n[gs])|ig?|n[gs]|n|[gs])?|\s*K(?:i(?:g?s|n[gs])|ig?|n[gs]|n|[gs])?)|2nd(?:\.\s*K(?:i(?:g?s|n[gs])|ig?|n[gs]|n|[gs])?|\s*K(?:i(?:g?s|n[gs])|ig?|n[gs]|n|[gs])?)|II(?:\.\s*K(?:i(?:g?s|n[gs])|ig?|n[gs]|n|[gs])?|\s*K(?:i(?:g?s|n[gs])|ig?|n[gs]|n|[gs])?)|2(?:\.\s*K(?:i(?:g?s|n[gs])|ig?|n[gs]|n|[gs])?|\s*K(?:i(?:g?s|n[gs])|ig?|n[gs]|n|[gs])?)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Kgs"],
+				testament: "o",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(2(?:(?:\s*Kin|K)gs|\s*Kgs?))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Kgs"],
+				testament: "o",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(1(?:(?:\s*Kin|K)gs|\s*Kgs?))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["1Chr"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:(?:First\s*|(?:(?:(?:1st|I)|1)\.\s*|(?:(?:1st|I)\s*|(?:1\s*)?)))Paralipomenon|First\s*C(?:h(?:(?:oronicles|r(?:onicals|n))|ronicles)|(?:ho?rono|ron[io])cles|oron[io]cles)|First\s*C(?:(?:ho?rono|ron[io])cle|hronicle|oron[io]cle|hr(?:on?)?|ron)|(?:(?:1st|I)|1)\.\s*C(?:h(?:(?:oronicles|r(?:onicals|n))|ronicles)|(?:ho?rono|ron[io])cles|oron[io]cles)|(?:(?:1st|I)|1)\.\s*C(?:(?:ho?rono|ron[io])cle|hronicle|oron[io]cle|hr(?:on?)?|ron)|(?:1st|I)\s*C(?:h(?:(?:oronicles|r(?:onicals|n))|ronicles)|(?:ho?rono|ron[io])cles|oron[io]cles)|(?:1st|I)\s*C(?:(?:ho?rono|ron[io])cle|hronicle|oron[io]cle|hr(?:on?)?|ron)|1\s*Choronicles|(?:(?:1\s*Cho|(?:1\s*)?Ch)rono|1\s*Cron[io])cles|(?:(?:1\s*Cho|(?:1\s*)?Ch)rono|1\s*Cron[io])cle|(?:1\s*)?Chronicals|(?:1\s*)?Chronicles|(?:1\s*Co|Ch?o)ron[io]cles|(?:1\s*)?Chronicle|(?:1\s*Co|Ch?o)ron[io]cle|Cron[io]cles|Cron[io]cle|1\s*C(?:h(?:r(?:on?)?)?|ron)|1(?:\s*Chrn|Chr)))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First(?:\.\s*(?:Paralipomenon|C(?:(?:h?oron[io]cles|(?:hronic(?:al|le)|hronocle)s|ron[io]cles)|(?:h?oron[io]cle|hron[io]cle|ron[io]cle)))|\s*(?:Paralipomenon|C(?:(?:h?oron[io]cles|(?:hronic(?:al|le)|hronocle)s|ron[io]cles)|(?:h?oron[io]cle|hron[io]cle|ron[io]cle))))|1st(?:\.\s*(?:Paralipomenon|C(?:(?:h?oron[io]cles|(?:hronic(?:al|le)|hronocle)s|ron[io]cles)|(?:h?oron[io]cle|hron[io]cle|ron[io]cle)))|\s*(?:Paralipomenon|C(?:(?:h?oron[io]cles|(?:hronic(?:al|le)|hronocle)s|ron[io]cles)|(?:h?oron[io]cle|hron[io]cle|ron[io]cle))))|1(?:\.\s*(?:Paralipomenon|C(?:(?:h?oron[io]cles|(?:hronic(?:al|le)|hronocle)s|ron[io]cles)|(?:h?oron[io]cle|hron[io]cle|ron[io]cle)))|\s*(?:Paralipomenon|C(?:(?:h?oron[io]cles|(?:hronic(?:al|le)|hronocle)s|ron[io]cles)|(?:h?oron[io]cle|hron[io]cle|ron[io]cle))))|I(?:\.\s*(?:Paralipomenon|C(?:(?:h?oron[io]cles|(?:hronic(?:al|le)|hronocle)s|ron[io]cles)|(?:h?oron[io]cle|hron[io]cle|ron[io]cle)))|\s*(?:Paralipomenon|C(?:(?:h?oron[io]cles|(?:hronic(?:al|le)|hronocle)s|ron[io]cles)|(?:h?oron[io]cle|hron[io]cle|ron[io]cle))))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Chr"],
+				testament: "o",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second(?:\.\s*(?:Paralipomenon|C(?:(?:h?oron[io]cles|(?:hronic(?:al|le)|hronocle)s|ron[io]cles)|(?:h?oron[io]cle|hron[io]cle|ron[io]cle)))|\s*(?:Paralipomenon|C(?:(?:h?oron[io]cles|(?:hronic(?:al|le)|hronocle)s|ron[io]cles)|(?:h?oron[io]cle|hron[io]cle|ron[io]cle))))|2nd(?:\.\s*(?:Paralipomenon|C(?:(?:h?oron[io]cles|(?:hronic(?:al|le)|hronocle)s|ron[io]cles)|(?:h?oron[io]cle|hron[io]cle|ron[io]cle)))|\s*(?:Paralipomenon|C(?:(?:h?oron[io]cles|(?:hronic(?:al|le)|hronocle)s|ron[io]cles)|(?:h?oron[io]cle|hron[io]cle|ron[io]cle))))|II(?:\.\s*(?:Paralipomenon|C(?:(?:h?oron[io]cles|(?:hronic(?:al|le)|hronocle)s|ron[io]cles)|(?:h?oron[io]cle|hron[io]cle|ron[io]cle)))|\s*(?:Paralipomenon|C(?:(?:h?oron[io]cles|(?:hronic(?:al|le)|hronocle)s|ron[io]cles)|(?:h?oron[io]cle|hron[io]cle|ron[io]cle))))|2(?:\.\s*(?:Paralipomenon|C(?:(?:h?oron[io]cles|(?:hronic(?:al|le)|hronocle)s|ron[io]cles)|(?:h?oron[io]cle|hron[io]cle|ron[io]cle)))|\s*(?:Paralipomenon|C(?:(?:h?oron[io]cles|(?:hronic(?:al|le)|hronocle)s|ron[io]cles)|(?:h?oron[io]cle|hron[io]cle|ron[io]cle))))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Chr"],
+				testament: "o",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Paralipomenon|C(?:(?:h?oron[io]cles|(?:hronic(?:al|le)|hronocle)s|ron[io]cles)|(?:h?oron[io]cle|hron[io]cle|ron[io]cle))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Chr"],
+				testament: "o",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First(?:\.\s*C(?:hr(?:o?n|o?)|ron)|\s*C(?:hr(?:o?n|o?)|ron))|1st(?:\.\s*C(?:hr(?:o?n|o?)|ron)|\s*C(?:hr(?:o?n|o?)|ron))|1(?:\.\s*C(?:hr(?:o?n|o?)|ron)|\s*C(?:hr(?:o?n|o?)|ron))|I(?:\.\s*C(?:hr(?:o?n|o?)|ron)|\s*C(?:hr(?:o?n|o?)|ron))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Chr"],
+				testament: "o",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second(?:\.\s*C(?:hr(?:o?n|o?)|ron)|\s*C(?:hr(?:o?n|o?)|ron))|2nd(?:\.\s*C(?:hr(?:o?n|o?)|ron)|\s*C(?:hr(?:o?n|o?)|ron))|II(?:\.\s*C(?:hr(?:o?n|o?)|ron)|\s*C(?:hr(?:o?n|o?)|ron))|2(?:\.\s*C(?:hr(?:o?n|o?)|ron)|\s*C(?:hr(?:o?n|o?)|ron))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Chr"],
+				testament: "o",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(2(?:\s*Ch(?:ronicles|r?)|Chr))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Chr"],
+				testament: "o",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(1(?:\s*Ch(?:ronicles|r?)|Chr))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Ezra"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(E(?:zra?|sra))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(E(?:zra?|sra))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Neh"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(Ne(?:h(?:[ei]m(?:a[ai](?:[ai])?h|i(?:a[ai]h|i(?:[ai])?h|a?h|a)|ah)|amiah|amia)?)?)(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Ne(?:h(?:[ei]m(?:a[ai](?:[ai])?h|i(?:a[ai]h|i(?:[ai])?h|a?h|a)|ah)|amiah|amia)?)?)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["GkEsth"],
 				testament: "a",
-				regexp: /(?:^|(?<=[^\p{L}]))((?:Esther\s*\(Greek\)|G(?:(?:r(?:eek\s*Esther|\s*Esth)|k\s*?Esth)|(?:r(?:eek\s*Esth?|\s*Est)|k\s*Est))))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))((?:Esther\s*\(Greek\)|G(?:(?:r(?:eek\s*Esther|\s*Esth|\.\s*Est)|k\s*?Esth)|(?:r(?:eek\s*Esth?|\s*Est)|k\s*Est))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Esth"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(Es(?:t(?:h?er|hr|h)?)?)(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Es(?:t(?:h?er|hr|h)?)?)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Job"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(Jo?b)(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Jo?b)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Ps"],
 				testament: "oa",
-				testament_books: { "Ps": "oa" },
+				testament_books: { Ps: "oa" },
 				extra: "1",
-				regexp: /\b((?:(?:(?:1[02-5]|[2-9])?(?:1\s*st|2\s*nd|3\s*rd))|1?1[123]\s*th|(?:150|1[0-4][04-9]|[1-9][04-9]|[4-9])\s*th)\s*Psalm)\b/gi
+				regexp: /(?:^|(?<=[^\p{L}]))((?:(?:(?:(?:15|2)|3))?1\s*st|(?:1(?:1[0-9]|50|[6-9])|2[04-9]|3[04-9])\s*th|(?:1[02-4]|[4-9])(?:1\s*st|2\s*nd|3\s*rd|[04-9]\s*th|\s*th)|(?:[23])?2\s*nd|[23]3\s*rd|1[15]\s*th|3\s*rd)\s*Psalm)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Ps"],
 				testament: "oa",
-				testament_books: { "Ps": "oa" },
-				regexp: /(?:^|(?<=[^\p{L}]))((?:P(?:s(?:a(?:(?:lm[alm]|ml?m)|lam)|m(?:alm|l)|lam)|l(?:a(?:sm)?a|s(?:sss|a?m)))s?|P(?:s(?:a[al]l|lal)|a(?:ls|sl))ms?|P(?:(?:s(?:a(?:(?:lm?s|m(?:l[as]|s)|aa)|las)|m(?:als|m)|lm[ms]|sm)|la(?:sm?s|ms)|(?:s(?:a(?:ma|am)|lma)|l(?:ama|m))s|a(?:s(?:(?:ml|s)|m)s|(?:l[lm]|m[ls])s))|(?:s(?:a(?:lm?|ml?)?|ala|m(?:al?)?|l[am]|s)?|l(?:a(?:sm?|m)|s(?:ss?|a))))|Salms?))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				testament_books: { Ps: "oa" },
+				regexp: /(?:^|(?<=[^\p{L}]))((?:P(?:s(?:a(?:(?:lm[alm]|ml?m)|lam)|m(?:alm|l)|lam)|l(?:a(?:sm)?a|s(?:sss|a?m)))s?|P(?:s(?:a[al]l|lal)|a(?:ls|sl))ms?|P(?:(?:s(?:a(?:(?:lm?s|m(?:l[as]|s)|aa)|las)|m(?:als|m)|lm[ms]|sm)|la(?:sm?s|ms)|(?:s(?:a(?:ma|am)|lma)|l(?:ama|m))s|a(?:s(?:(?:ml|s)|m)s|(?:l[lm]|m[ls])s))|(?:s(?:a(?:lm?|ml?)?|ala|m(?:al?)?|l[am]|s)?|l(?:a(?:sm?|m)|s(?:ss?|a))))|Salms?))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["PrAzar"],
 				testament: "a",
-				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Pr(?:ayer(?:s\s*of\s*Azariah?|\s*of\s*Azariah?)|\s*of\s*Azariah?)|Prayer(?:s\s*of\s*Azariah?|\s*of\s*Azariah?)|Pr\s*of\s*Azariah?|Pr(?:\s*Aza|Aza?)r|Azariah?))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Pr(?:ayer(?:s\s*of\s*Azariah?|\s*of\s*Azariah?)|\s*of\s*Azariah?)|Prayer(?:s\s*of\s*Azariah?|\s*of\s*Azariah?)|Pr\s*of\s*Azariah?|Pr(?:(?:\.\s*Aza|(?:\s*Aza|Aza?))r|Az)|Azariah?))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Prov"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))((?:P(?:rob|o)verbs|P(?:(?:(?:(?:r(?:(?:(?:over|v)|ver)|ever)bs|v)|r(?:overb|everb|verb|ov?|vb|v)?)|rovebs)|roberbs)|Porverbs|Oroverbs))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))((?:P(?:rob|o)verbs|P(?:(?:(?:(?:r(?:(?:(?:over|v)|ver)|ever)bs|v)|r(?:overb|everb|verb|ov?|vb|v)?)|rovebs)|roberbs)|Porverbs|Oroverbs))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Eccl"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))((?:Ec(?:(?:(?:(?:cles(?:i?aia|sai)s|cles(?:i(?:ai)?s|ai?s)|clesiias)t|(?:cles(?:i(?:asti|t)|ait)|clesias?t))es|clesiaas?tes|clessias?tes|les(?:(?:i(?:aia)?s|ias?)tes|sias?tes))|(?:clesiaste|c(?:l(?:es(?:iast)?)?)?|clesiate|l(?:esiaste)?)?)|Qo(?:h(?:eleth)?)?))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))((?:Ec(?:(?:(?:(?:cles(?:i?aia|sai)s|cles(?:i(?:ai)?s|ai?s)|clesiias)t|(?:cles(?:i(?:asti|t)|ait)|clesias?t))es|clesiaas?tes|clessias?tes|les(?:(?:i(?:aia)?s|ias?)tes|sias?tes))|(?:clesiaste|c(?:l(?:es(?:iast)?)?)?|clesiate|l(?:esiaste)?)?)|Qo(?:h(?:eleth)?)?))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["SgThree"],
 				testament: "a",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:The\s*Song\s*of\s*(?:the\s*(?:Three\s*(?:Holy\s*Children|Young\s*Men|(?:Youth|Jew)s)|3\s*(?:Holy\s*Children|Young\s*Men|(?:Youth|Jew)s))|Three\s*(?:Holy\s*Children|Young\s*Men|(?:Youth|Jew)s)|3\s*(?:Holy\s*Children|Young\s*Men|(?:Youth|Jew)s))|S(?:ong\s*of\s*(?:the\s*(?:Three\s*(?:Holy\s*Children|Young\s*Men|(?:Youth|Jew)s)|3\s*(?:Holy\s*Children|Young\s*Men|(?:Youth|Jew)s))|Three\s*(?:Holy\s*Children|Young\s*Men|(?:Youth|Jew)s)|3\s*(?:Holy\s*Children|Young\s*Men|(?:Youth|Jew)s))|(?:(?:\.\s*(?:of\s*(?:Th(?:ree(?:\.\s*(?:Ch|Y)|\s*(?:Ch|Y))|\.\s*(?:Ch|Y)|\s*(?:Ch|Y))|3(?:\.\s*(?:Ch|Y)|\s*(?:Ch|Y)))|Th(?:ree(?:\.\s*(?:Ch|Y)|\s*(?:Ch|Y))|\.\s*(?:Ch|Y)|\s*(?:Ch|Y))|3(?:\.\s*(?:Ch|Y)|\s*(?:Ch|Y)))|\s*(?:of\s*(?:Th(?:ree(?:\.\s*(?:Ch|Y)|\s*(?:Ch|Y))|\.\s*(?:Ch|Y)|\s*(?:Ch|Y))|3(?:\.\s*(?:Ch|Y)|\s*(?:Ch|Y)))|Th(?:ree(?:\.\s*(?:Ch|Y)|\s*(?:Ch|Y))|\.\s*(?:Ch|Y)|\s*(?:Ch|Y))|3(?:\.\s*(?:Ch|Y)|\s*(?:Ch|Y)))|ong\s*Three|(?:ng\s*|g)Three|g\s*Three)|g\s*Thr))))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Song\s*of\s*(?:the\s*(?:Three\s*(?:Holy\s*Children|Young\s*Men|(?:Youth|Jew)s)|3\s*(?:Holy\s*Children|Young\s*Men|(?:Youth|Jew)s))|Three\s*(?:Holy\s*Children|Young\s*Men|(?:Youth|Jew)s)|3\s*(?:Holy\s*Children|Young\s*Men|(?:Youth|Jew)s))|S(?:ong\s*of\s*(?:the\s*(?:Three\s*(?:Holy\s*Children|Young\s*Men|(?:Youth|Jew)s)|3\s*(?:Holy\s*Children|Young\s*Men|(?:Youth|Jew)s))|Three\s*(?:Holy\s*Children|Young\s*Men|(?:Youth|Jew)s)|3\s*(?:Holy\s*Children|Young\s*Men|(?:Youth|Jew)s))|(?:(?:\.\s*(?:of\s*(?:Th(?:ree(?:\.\s*(?:Ch|Y)|\s*(?:Ch|Y))|\.\s*(?:Ch|Y)|\s*(?:Ch|Y))|3(?:\.\s*(?:Ch|Y)|\s*(?:Ch|Y)))|Th(?:ree(?:\.\s*(?:Ch|Y)|\s*(?:Ch|Y))|\.\s*(?:Ch|Y)|\s*(?:Ch|Y))|3(?:\.\s*(?:Ch|Y)|\s*(?:Ch|Y)))|\s*(?:of\s*)?Th(?:ree(?:\.\s*(?:Ch|Y)|\s*(?:Ch|Y))|\.\s*(?:Ch|Y)|\s*(?:Ch|Y))|\s*of\s*III\s*Ch|\s*(?:of\s*)?3(?:\.\s*(?:Ch|Y)|\s*(?:Ch|Y))|ong\s*Three|(?:ng\s*|g)Three|g\s*Three|THC)|g\s*Thr))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Song"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Song(?:s\s*of\s*S(?:o(?:lom[ao]ns?|ngs?)|alom[ao]ns?)|\s*of\s*S(?:o(?:lom[ao]ns?|ngs?)|alom[ao]ns?))|Songs?\s*of\s*S(?:o(?:lom[ao]ns?|ngs?)|alom[ao]ns?)|S(?:(?:\s*of\s*S|o[Sl]|S)|o(?:n(?:gs?)?)?)|Sn?gs?))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Song(?:s\s*of\s*S(?:o(?:lom[ao]ns?|ngs?)|alom[ao]ns?)|\s*of\s*S(?:o(?:lom[ao]ns?|ngs?)|alom[ao]ns?))|Songs?\s*of\s*S(?:o(?:lom[ao]ns?|ngs?)|alom[ao]ns?)|S(?:(?:\s*of\s*S|o[Sl]|S)|o(?:n(?:gs?)?)?)|Sn?gs?))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Jer"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(J(?:er(?:(?:em(?:aia|ii)|am[ai]i|im(?:i[ai]|a))h|em(?:(?:(?:ai?h|ie)|iah)|iha)|am(?:i(?:ah|ha)|ah)|imih|aiah|m[im]ah)|e(?:r(?:emia|emih|ami[ah]|e(?:mi)?)?)?|r))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(J(?:er(?:(?:em(?:aia|ii)|am[ai]i|im(?:i[ai]|a))h|em(?:(?:(?:ai?h|ie)|iah)|iha)|am(?:i(?:ah|ha)|ah)|imih|aiah|m[im]ah)|e(?:r(?:emia|emih|ami[ah]|e(?:mi)?)?)?|r))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Ezek"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(E(?:ze[ei]ki?el|zi(?:[ei]ki?el|ki?el)|x[ei](?:[ei]ki?el|ki?el)|zek(?:i[ae]|e)l|z(?:ek?|k)))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(E(?:ze[ei]ki?el|zi(?:[ei]ki?el|ki?el)|x[ei](?:[ei]ki?el|ki?el)|zek(?:i[ae]|e)l|z(?:ek?|k)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Dan"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(D(?:ani[ae]l|an?|[ln]))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(D(?:ani[ae]l|an?|[ln]))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Hos"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(H(?:osea|os?|s))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(H(?:osea|os?|s))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Joel"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(J(?:oel?|l))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(J(?:oel?|l))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Amos"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(Am(?:o?s|o)?)(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Am(?:o?s|o)?)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Obad"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(Ob(?:adiah|a(?:d(?:ia)?)?|idah|d)?)(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Ob(?:adiah|a(?:d(?:ia)?)?|idah|d)?)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Jonah"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(J(?:on(?:ah)?|nh))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(J(?:on(?:ah)?|nh))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Mic"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(Mi(?:c(?:hah?|ah?)?)?)(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Mi(?:c(?:hah?|ah?)?)?)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Nah"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(Na(?:h(?:um?)?)?)(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Na(?:h(?:um?)?)?)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Hab"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(Hab(?:bak(?:k[au]kk?|[au]kk?)|ak(?:k[au]kk?|[au]kk?)|k)?)(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Hab(?:bak(?:k[au]kk?|[au]kk?)|ak(?:k[au]kk?|[au]kk?)|k)?)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Zeph"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(Z(?:ephanaiah?|ephaniah?|a(?:phaniah?|faniah?)|efaniah?|eph?|ph?))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Z(?:ephanaiah?|ephaniah?|a(?:phaniah?|faniah?)|efaniah?|eph?|ph?))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Hag"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(H(?:ag(?:gia[hi]|g?ai|g)?|gg?))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(H(?:ag(?:gia[hi]|g?ai|g)?|gg?))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Zech"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(Z(?:a(?:(?:ch[ae]r(?:(?:a[ai]|a)h|ii?h)|kariah)|ch?)|(?:ach[ae]ria|c)h?|e(?:c(?:h[ae]r(?:(?:a[ai]|a)h|ii?h)|h?)|ch[ae]riah?|kariah?)))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Z(?:a(?:(?:ch[ae]r(?:(?:a[ai]|a)h|ii?h)|kariah)|ch?)|(?:ach[ae]ria|c)h?|e(?:c(?:h[ae]r(?:(?:a[ai]|a)h|ii?h)|h?)|ch[ae]riah?|kariah?)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Mal"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(Mal(?:ach?i|ichi|ach)?)(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Mal(?:ach?i|ichi|ach)?)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Matt"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Gospel\s*(?:according\s*to\s*(?:S(?:aint\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)|t(?:\.\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)|\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)))|M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t))|of\s*(?:S(?:aint\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)|t(?:\.\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)|\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)))|M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)))|Gospel\s*(?:according\s*to\s*(?:S(?:aint\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)|t(?:\.\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)|\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)))|M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t))|of\s*(?:S(?:aint\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)|t(?:\.\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)|\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)))|M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)))|S(?:aint\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)|t(?:\.\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)|\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)))|M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|tt?)))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Gospel\s*(?:according\s*to(?:(?:\s*S(?:ain)?t\.|\.)\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)|\s*S(?:ain)?t\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)|\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t))|of(?:(?:\s*S(?:ain)?t\.|\.)\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)|\s*S(?:ain)?t\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)|\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)))|Gospel\s*(?:according\s*to(?:(?:\s*S(?:ain)?t\.|\.)\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)|\s*S(?:ain)?t\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)|\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t))|of(?:(?:\s*S(?:ain)?t\.|\.)\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)|\s*S(?:ain)?t\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)|\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)))|S(?:ain)?t\.\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)|S(?:ain)?t\s*M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["Matt"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}]))(M(?:at(?:t(?:h[ht]|th)i?ew|h(?:[ht](?:[ht]i?ew|i?ew)|i?ew)|t(?:h?|t)iew|th?we|t(?:h?|t)ew|t)?|t))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["Matt"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}]))(Mtt)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Mark"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Gospel\s*(?:according\s*to\s*(?:S(?:aint\s*M(?:ark?|rk?|k)|t(?:\.\s*M(?:ark?|rk?|k)|\s*M(?:ark?|rk?|k)))|M(?:ark?|rk?|k))|of\s*(?:S(?:aint\s*M(?:ark?|rk?|k)|t(?:\.\s*M(?:ark?|rk?|k)|\s*M(?:ark?|rk?|k)))|M(?:ark?|rk?|k)))|Gospel\s*(?:according\s*to\s*(?:S(?:aint\s*M(?:ark?|rk?|k)|t(?:\.\s*M(?:ark?|rk?|k)|\s*M(?:ark?|rk?|k)))|M(?:ark?|rk?|k))|of\s*(?:S(?:aint\s*M(?:ark?|rk?|k)|t(?:\.\s*M(?:ark?|rk?|k)|\s*M(?:ark?|rk?|k)))|M(?:ark?|rk?|k)))|S(?:aint\s*M(?:ark?|rk?|k)|t(?:\.\s*M(?:ark?|rk?|k)|\s*M(?:ark?|rk?|k)))|M(?:ark?|rk?|k)))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Gospel\s*(?:according\s*to(?:(?:\s*S(?:ain)?t\.|\.)\s*M(?:ark?|rk?|k)|\s*S(?:ain)?t\s*M(?:ark?|rk?|k)|\s*M(?:ark?|rk?|k))|of(?:(?:\s*S(?:ain)?t\.|\.)\s*M(?:ark?|rk?|k)|\s*S(?:ain)?t\s*M(?:ark?|rk?|k)|\s*M(?:ark?|rk?|k)))|Gospel\s*(?:according\s*to(?:(?:\s*S(?:ain)?t\.|\.)\s*M(?:ark?|rk?|k)|\s*S(?:ain)?t\s*M(?:ark?|rk?|k)|\s*M(?:ark?|rk?|k))|of(?:(?:\s*S(?:ain)?t\.|\.)\s*M(?:ark?|rk?|k)|\s*S(?:ain)?t\s*M(?:ark?|rk?|k)|\s*M(?:ark?|rk?|k)))|S(?:ain)?t\.\s*M(?:ark?|rk?|k)|S(?:ain)?t\s*M(?:ark?|rk?|k)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["Mark"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}]))(M(?:ark?|rk?|k))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Luke"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Gospel\s*(?:according\s*to\s*(?:S(?:aint\s*L(?:u(?:ke?)?|k)|t(?:\.\s*L(?:u(?:ke?)?|k)|\s*L(?:u(?:ke?)?|k)))|L(?:u(?:ke?)?|k))|of\s*(?:S(?:aint\s*L(?:u(?:ke?)?|k)|t(?:\.\s*L(?:u(?:ke?)?|k)|\s*L(?:u(?:ke?)?|k)))|L(?:u(?:ke?)?|k)))|Gospel\s*(?:according\s*to\s*(?:S(?:aint\s*L(?:u(?:ke?)?|k)|t(?:\.\s*L(?:u(?:ke?)?|k)|\s*L(?:u(?:ke?)?|k)))|L(?:u(?:ke?)?|k))|of\s*(?:S(?:aint\s*L(?:u(?:ke?)?|k)|t(?:\.\s*L(?:u(?:ke?)?|k)|\s*L(?:u(?:ke?)?|k)))|L(?:u(?:ke?)?|k)))|S(?:aint\s*L(?:u(?:ke?)?|k)|t(?:\.\s*L(?:u(?:ke?)?|k)|\s*L(?:u(?:ke?)?|k)))|L(?:u(?:ke?)?|k)))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Gospel\s*(?:according\s*to(?:(?:\s*S(?:ain)?t\.|\.)\s*L(?:u(?:ke?)?|k)|\s*S(?:ain)?t\s*L(?:u(?:ke?)?|k)|\s*L(?:u(?:ke?)?|k))|of(?:(?:\s*S(?:ain)?t\.|\.)\s*L(?:u(?:ke?)?|k)|\s*S(?:ain)?t\s*L(?:u(?:ke?)?|k)|\s*L(?:u(?:ke?)?|k)))|Gospel\s*(?:according\s*to(?:(?:\s*S(?:ain)?t\.|\.)\s*L(?:u(?:ke?)?|k)|\s*S(?:ain)?t\s*L(?:u(?:ke?)?|k)|\s*L(?:u(?:ke?)?|k))|of(?:(?:\s*S(?:ain)?t\.|\.)\s*L(?:u(?:ke?)?|k)|\s*S(?:ain)?t\s*L(?:u(?:ke?)?|k)|\s*L(?:u(?:ke?)?|k)))|S(?:ain)?t\.\s*L(?:u(?:ke?)?|k)|S(?:ain)?t\s*L(?:u(?:ke?)?|k)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["Luke"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}]))(L(?:u(?:ke?)?|k))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["1John"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|oh?|h?n|h)|(?:(?:1st|I)|1)\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|oh?|h?n|h)|(?:(?:1st|I)|1)\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|oh?|h?n|h)|1John))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First\.?\s*Jo|1st\.?\s*Jo|1\.?\s*Jo|I\.?\s*Jo))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["2John"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|oh?|h?n|h)|(?:2(?:nd)?|II)\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|oh?|h?n|h)|(?:2(?:nd)?|II)\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|oh?|h?n|h)|2John))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second\.?\s*Jo|2nd\.?\s*Jo|II\.?\s*Jo|2\.?\s*Jo))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["3John"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Third\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|oh?|h?n|h)|(?:3(?:rd)?|III)\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|oh?|h?n|h)|(?:3(?:rd)?|III)\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|oh?|h?n|h)|3John))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Third\.?\s*Jo|III\.?\s*Jo|3rd\.?\s*Jo|3\.?\s*Jo))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1John"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(1(?:\s*J(?:oh)?|Joh)n)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2John"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(2(?:\s*J(?:oh)?|Joh)n)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["3John"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(3(?:\s*J(?:oh)?|Joh)n)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1John"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First(?:\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n))|1st(?:\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n))|1(?:\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n))|I(?:\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2John"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second(?:\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n))|2nd(?:\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n))|II(?:\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n))|2(?:\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["3John"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Third(?:\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n))|III(?:\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n))|3rd(?:\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n))|3(?:\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["John"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Gospel\s*(?:according\s*to\s*(?:S(?:aint\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|t(?:\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)))|J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n))|of\s*(?:S(?:aint\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|t(?:\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)))|J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)))|Gospel\s*(?:according\s*to\s*(?:S(?:aint\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|t(?:\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)))|J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n))|of\s*(?:S(?:aint\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|t(?:\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)))|J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)))|S(?:aint\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|t(?:\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)))|J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Gospel\s*(?:according\s*to(?:(?:\s*S(?:ain)?t\.|\.)\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*S(?:ain)?t\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n))|of(?:(?:\s*S(?:ain)?t\.|\.)\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*S(?:ain)?t\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)))|Gospel\s*(?:according\s*to(?:(?:\s*S(?:ain)?t\.|\.)\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*S(?:ain)?t\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n))|of(?:(?:\s*S(?:ain)?t\.|\.)\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*S(?:ain)?t\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)))|S(?:ain)?t\.\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)|S(?:ain)?t\s*J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["John"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}]))(J(?:o?phn|o(?:h[mn]|nh)|(?:h[ho]|oo)n|o?h|h?n))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Acts"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Acts\s*of\s*the\s*Apostles|Ac(?:ts\s*of\s*the\s*Apostles|(?:tsss|(?:t(?:ss?)?)?))))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))((?:The\s*Acts\s*of\s*the\s*Apostles|Ac(?:ts\s*of\s*the\s*Apostles|(?:tsss|(?:t(?:ss?)?)?))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Rom"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}]))(R(?:omands|o(?:m(?:a(?:ns|sn)|s)|s)|oamns|pmans|o(?:m(?:an)?)?|mn?s|mn?))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
-			},
-			{
-				osis: ["2Cor"],
-				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second\s*C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|o(?:r(?:inthia?ns|thians)|(?:r(?:in(?:t(?:h(?:ian)?)?)?|th(?:ian)?)?)?)|oranthians)|(?:2(?:nd)?|II)\.\s*C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|o(?:r(?:inthia?ns|thians)|(?:r(?:in(?:t(?:h(?:ian)?)?)?|th(?:ian)?)?)?)|oranthians)|(?:2(?:nd)?|II)\s*C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|o(?:r(?:inthia?ns|thians)|(?:r(?:in(?:t(?:h(?:ian)?)?)?|th(?:ian)?)?)?)|oranthians)|2Cor))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(R(?:omands|o(?:m(?:a(?:ns|sn)|s)|s)|oamns|pmans|o(?:m(?:an)?)?|mn?s|mn?))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["1Cor"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:(?:(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Coriinthii|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corinthii|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corinthoi|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corn(?:in?thi|thii)|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corrin?thi|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corithii|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Coritho)ans|(?:(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corinthi(?:an[ao]|na)|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corinithina|(?:(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corin|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Cor)ithan|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corn(?:in?than|thin)|(?:(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corin|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corni)thain|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corinthan|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corithin)s|(?:(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corinthi(?:a[ai]|o)|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corinithia|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Coriinthia|(?:(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corin|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Cor)ithai|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corn(?:inthai|thia)|(?:(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corin|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corni)thaia|(?:(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corrin?tha|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corntha)i|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corinthoa|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corinti[ao]|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corithia)ns|(?:First\s*Corin[an]|(?:(?:1st|I)|1)\.\s*Corin[an]|(?:(?:1st|I)|1)\s*Corin[an])thians|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Chor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corinthia?ns|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Coranthians|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Corinthian|First\s*Corthians|First\s*Co(?:r(?:th(?:ian)?|in(?:th?)?)?)?|(?:(?:1st|I)|1)\.\s*Corthians|(?:(?:1st|I)|1)\.\s*Co(?:r(?:th(?:ian)?|in(?:th?)?)?)?|(?:(?:1st|I)|1)\s*Corthians|C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|orinthi(?:a?ns|an))|(?:(?:1st|I)|1)\s*Co(?:r(?:th(?:ian)?|in(?:th?)?)?)?|1Cor))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First(?:\.\s*C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|orinthi(?:a?ns|an))|\s*C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|orinthi(?:a?ns|an)))|1st(?:\.\s*C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|orinthi(?:a?ns|an))|\s*C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|orinthi(?:a?ns|an)))|1(?:\.\s*C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|orinthi(?:a?ns|an))|\s*C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|orinthi(?:a?ns|an)))|I(?:\.\s*C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|orinthi(?:a?ns|an))|\s*C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|orinthi(?:a?ns|an)))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
-				osis: ["Gal"],
+				osis: ["2Cor"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}]))(G(?:al(?:at(?:i(?:an[ai]|nan|on[an])|a?n|on)s|at(?:i(?:a[ai]|oa)|a[ao]|oa)ns|at[ai]i(?:[ao])?ns|lati(?:[ao])?ns|at(?:i(?:an?s|na?s|on?s)|as))|a(?:l(?:a(?:t(?:ian)?)?)?)?|l))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second(?:\.\s*C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|orinthi(?:a?ns|an))|\s*C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|orinthi(?:a?ns|an)))|2nd(?:\.\s*C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|orinthi(?:a?ns|an))|\s*C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|orinthi(?:a?ns|an)))|II(?:\.\s*C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|orinthi(?:a?ns|an))|\s*C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|orinthi(?:a?ns|an)))|2(?:\.\s*C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|orinthi(?:a?ns|an))|\s*C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|orinthi(?:a?ns|an)))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
-				osis: ["Eph"],
+				osis: ["1Cor"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}]))(E(?:pehesians|sphesians|ph(?:es(?:ian[ds]|ains)|isians|sians)|phesions|hp[ei]sians|p(?:h(?:e(?:s(?:ian)?)?|esain|isian|sian|s)?)?|pesians|hp))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(C(?:or(?:i(?:(?:inthii|nthii|nthoi|tho)|thii)|n(?:in?thi|thii)|rin?thi)ans|(?:or(?:i(?:(?:n(?:thi(?:an[ao]|na)|ithina)|thin)|nthan)|i(?:ni)?than|n(?:in?than|thin))|or(?:in|ni)thain)s|(?:or(?:i(?:(?:n(?:(?:t(?:hi(?:a[ai]|o)|i[ao])|ithia)|thoa)|inthia)|thia)|i(?:ni)?thai|n(?:inthai|thia))|or(?:in|ni)thaia|or(?:rin?tha|ntha)i)ns|orin[an]thians|hor(?:(?:(?:(?:inth(?:ia|ai)|inthi)|ithia)|nthia)|anthia)ns|orinthi(?:a?ns|an)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
-				osis: ["Phil"],
+				osis: ["1Cor"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}]))(Ph(?:il(?:l(?:ip(?:pi?ai|aia|i(?:a[ai]|ea))|p(?:ie|a))|ippia[ai]|ip(?:pai|e)a|ipp?ie|ipaia|pai)ns|il(?:l(?:ip(?:(?:pi[ei]|ii)|ppi)|l(?:ip[ip]i|pp?i))|ipp?ii|ppii|pppi|pe)ans|il(?:(?:ipppi|(?:ippe|i?pi))ans|l(?:(?:ip(?:pian|ai?n|ian)|(?:ipp?ea|pp?ia)n)|lipian)s|ip(?:pian|(?:p[ai]n|ai?n))s|ppians|pan)|i(?:l(?:(?:ipppi|(?:ippe|i?pi))an|l(?:i(?:p(?:pian|ai?n|ian)|p?)|(?:ipp?ea|pp?ia)n|lipian)|ip(?:pian|(?:p[ai]n|ai?n))|ppian|i(?:pp?)?|pp?)?)?|il(?:(?:ip(?:pai|e)|i?pi)n|lip(?:ie?n|p[ai]n))s|l(?:ip(?:p?ians|p)?|pp?)|p))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First(?:\.\s*Cor(?:anthians|thians|th(?:ian)?|inth|int?)?|\s*Cor(?:anthians|thians|th(?:ian)?|inth|int?)?)|1st(?:\.\s*Cor(?:anthians|thians|th(?:ian)?|inth|int?)?|\s*Cor(?:anthians|thians|th(?:ian)?|inth|int?)?)|1(?:\.\s*Cor(?:anthians|thians|th(?:ian)?|inth|int?)?|\s*Cor(?:anthians|thians|th(?:ian)?|inth|int?)?)|I(?:\.\s*Cor(?:anthians|thians|th(?:ian)?|inth|int?)?|\s*Cor(?:anthians|thians|th(?:ian)?|inth|int?)?)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Cor"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second(?:\.\s*Cor(?:anthians|thians|th(?:ian)?|inth|int?)?|\s*Cor(?:anthians|thians|th(?:ian)?|inth|int?)?)|2nd(?:\.\s*Cor(?:anthians|thians|th(?:ian)?|inth|int?)?|\s*Cor(?:anthians|thians|th(?:ian)?|inth|int?)?)|II(?:\.\s*Cor(?:anthians|thians|th(?:ian)?|inth|int?)?|\s*Cor(?:anthians|thians|th(?:ian)?|inth|int?)?)|2(?:\.\s*Cor(?:anthians|thians|th(?:ian)?|inth|int?)?|\s*Cor(?:anthians|thians|th(?:ian)?|inth|int?)?)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Cor"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(2(?:\s*Co(?:rinthians|r?)|Cor))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Cor"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(1(?:\s*Co(?:rinthians|r?)|Cor))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Cor"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First\.?\s*Co|1st\.?\s*Co|1\.?\s*Co|I\.?\s*Co))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Cor"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second\.?\s*Co|2nd\.?\s*Co|II\.?\s*Co|2\.?\s*Co))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Col"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}]))(C(?:al(?:l(?:os(?:sia|i[ao])ns|asi[ao]ns)|(?:[ao]s|[ao])si[ao]ns)|o(?:lossians|(?:l(?:oss(?:ian)?)?)?)|(?:oloss(?:io|a)|(?:(?:olas|ol[ao])|oll[ao])si[ao])ns))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Co)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
-				osis: ["2Thess"],
+				osis: ["Gal"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second\s*Th(?:es(?:(?:(?:(?:salon(?:i(?:c(?:i[ae]|a)|[ao]a|io|e)|aia|cie|oa)|salon(?:oi|e)a|sallonia|al(?:oni[ci]a|lonia|onio))n|(?:(?:s(?:alon[ai]n|olonin)|alonin)|s))|s?elonain)s|salon(?:ain|i[ao]n)s?|(?:so|a)lonians?|s?elonians?|olonians?|s)?|sss?|s)?|(?:2(?:nd)?|II)\.\s*Th(?:es(?:(?:(?:(?:salon(?:i(?:c(?:i[ae]|a)|[ao]a|io|e)|aia|cie|oa)|salon(?:oi|e)a|sallonia|al(?:oni[ci]a|lonia|onio))n|(?:(?:s(?:alon[ai]n|olonin)|alonin)|s))|s?elonain)s|salon(?:ain|i[ao]n)s?|(?:so|a)lonians?|s?elonians?|olonians?|s)?|sss?|s)?|(?:2(?:nd)?|II)\s*Th(?:es(?:(?:(?:(?:salon(?:i(?:c(?:i[ae]|a)|[ao]a|io|e)|aia|cie|oa)|salon(?:oi|e)a|sallonia|al(?:oni[ci]a|lonia|onio))n|(?:(?:s(?:alon[ai]n|olonin)|alonin)|s))|s?elonain)s|salon(?:ain|i[ao]n)s?|(?:so|a)lonians?|s?elonians?|olonians?|s)?|sss?|s)?|2Thess))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(G(?:al(?:at(?:i(?:an[ai]|nan|on[an])|a?n|on)s|at(?:i(?:a[ai]|oa)|a[ao]|oa)ns|at[ai]i(?:[ao])?ns|lati(?:[ao])?ns|at(?:i(?:an?s|na?s|on?s)|as))|a(?:l(?:a(?:t(?:ian)?)?)?)?|l))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["Eph"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}]))(E(?:pehesians|sphesians|ph(?:es(?:ian[ds]|ains)|isians|sians)|phesions|hp[ei]sians|p(?:h(?:e(?:s(?:ian)?)?|esain|isian|sian|s)?)?|pesians|hp))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["Phil"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}]))(Ph(?:il(?:l(?:ip(?:pi?ai|aia|i(?:a[ai]|ea))|p(?:ie|a))|ippia[ai]|ip(?:pai|e)a|ipp?ie|ipaia|pai)ns|il(?:l(?:ip(?:(?:pi[ei]|ii)|ppi)|l(?:ip[ip]i|pp?i))|ipp?ii|ppii|pppi|pe)ans|il(?:(?:ipppi|(?:ippe|i?pi))ans|l(?:(?:ip(?:pian|ai?n|ian)|(?:ipp?ea|pp?ia)n)|lipian)s|ip(?:pian|(?:p[ai]n|ai?n))s|ppians|pan)|i(?:l(?:(?:ipppi|(?:ippe|i?pi))an|l(?:i(?:p(?:pian|ai?n|ian)|p?)|(?:ipp?ea|pp?ia)n|lipian)|ip(?:pian|(?:p[ai]n|ai?n))|ppian|i(?:pp?)?|pp?)?)?|il(?:(?:ip(?:pai|e)|i?pi)n|lip(?:ie?n|p[ai]n))s|l(?:ip(?:p?ians|p)?|pp?)|p))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["Col"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}]))(C(?:al(?:l(?:os(?:sia|i[ao])ns|asi[ao]ns)|(?:[ao]s|[ao])si[ao]ns)|ol(?:ossians|(?:oss(?:ian)?)?)|(?:oloss(?:io|a)|(?:(?:olas|ol[ao])|oll[ao])si[ao])ns))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["1Thess"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:(?:(?:(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thessalonic(?:i[ae]|a)|(?:First\s*Thessaloni[ao]|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thessalonai|(?:(?:1st|I)|1)\.\s*Thessaloni[ao]|(?:(?:1st|I)|1)\s*Thessaloni[ao])a|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thessaloniio|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thessaloncie|(?:(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thessalonoi|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thessalone|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thesaloni[ci])a|(?:(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thes|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*The)sallonia|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thessalonie|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thessalonoa|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thesalonio)n|(?:First\s*Thess?e|(?:(?:1st|I)|1)\.\s*Thess?e|(?:(?:1st|I)|1)\s*Thess?e)lonain|First\s*Thessalonin|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thessalonan|(?:(?:1st|I)|1)\.\s*Thessalonin|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thesalonin|(?:(?:1st|I)|1)\s*Thessalonin|1Thes)s|(?:(?:(?:(?:First\s*Thessaloni[ao]|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thessalonai|(?:(?:1st|I)|1)\.\s*Thessaloni[ao]|(?:(?:1st|I)|1)\s*Thessaloni[ao])n|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thss)|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thess)|(?:(?:First\s*Thess?e|(?:(?:1st|I)|1)\.\s*Thess?e|(?:(?:1st|I)|1)\s*Thess?e)|(?:(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thesa|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Theso))lonian)s|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thessoloni(?:ans?|ns)|(?:First\s*Thessaloni[ao]|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thessalonai|(?:(?:1st|I)|1)\.\s*Thessaloni[ao]|(?:(?:1st|I)|1)\s*Thessaloni[ao])n|(?:(?:First\s*Thess?e|(?:(?:1st|I)|1)\.\s*Thess?e|(?:(?:1st|I)|1)\s*Thess?e)|(?:(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thesa|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Theso))lonian|Thes(?:s(?:(?:al(?:on(?:i(?:c(?:i[ae]|a)|[ao]a|io)|aia|cie|oa)|on(?:oi|e)a|lonia)n|elonain|alon[ai]n)s|(?:alon(?:ain|i[ao]n)|elonian)s|oloni(?:ans?|ns)|alon(?:ain|i[ao]n)|elonian)|(?:(?:(?:aloni[ci]a|allonia|alonio)|aloni)|elonai)ns|(?:[ao]|e)lonians|(?:[ao]|e)lonian)|First\s*Th(?:ess?|s)?|(?:(?:1st|I)|1)\.\s*Th(?:ess?|s)?|(?:First|(?:(?:(?:1st|I)|1)\.|(?:(?:1st|I)|1)))\s*Thss|(?:(?:1st|I)|1)\s*Th(?:ess?|s)?))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First(?:\.\s*Thes(?:s(?:(?:al(?:on(?:i(?:c(?:i[ae]|a)|[ao]a|io)|aia|cie|oa)|on(?:oi|e)a|lonia)n|elonain|alon[ai]n)s|(?:alon(?:ain|i[ao]n)|elonian)s|oloni(?:ans?|ns)|alon(?:ain|i[ao]n)|elonian)|(?:(?:(?:aloni[ci]a|allonia|alonio)|aloni)|elonai)ns|(?:[ao]|e)lonians|(?:[ao]|e)lonian)|\s*Thes(?:s(?:(?:al(?:on(?:i(?:c(?:i[ae]|a)|[ao]a|io)|aia|cie|oa)|on(?:oi|e)a|lonia)n|elonain|alon[ai]n)s|(?:alon(?:ain|i[ao]n)|elonian)s|oloni(?:ans?|ns)|alon(?:ain|i[ao]n)|elonian)|(?:(?:(?:aloni[ci]a|allonia|alonio)|aloni)|elonai)ns|(?:[ao]|e)lonians|(?:[ao]|e)lonian))|1st(?:\.\s*Thes(?:s(?:(?:al(?:on(?:i(?:c(?:i[ae]|a)|[ao]a|io)|aia|cie|oa)|on(?:oi|e)a|lonia)n|elonain|alon[ai]n)s|(?:alon(?:ain|i[ao]n)|elonian)s|oloni(?:ans?|ns)|alon(?:ain|i[ao]n)|elonian)|(?:(?:(?:aloni[ci]a|allonia|alonio)|aloni)|elonai)ns|(?:[ao]|e)lonians|(?:[ao]|e)lonian)|\s*Thes(?:s(?:(?:al(?:on(?:i(?:c(?:i[ae]|a)|[ao]a|io)|aia|cie|oa)|on(?:oi|e)a|lonia)n|elonain|alon[ai]n)s|(?:alon(?:ain|i[ao]n)|elonian)s|oloni(?:ans?|ns)|alon(?:ain|i[ao]n)|elonian)|(?:(?:(?:aloni[ci]a|allonia|alonio)|aloni)|elonai)ns|(?:[ao]|e)lonians|(?:[ao]|e)lonian))|1(?:\.\s*Thes(?:s(?:(?:al(?:on(?:i(?:c(?:i[ae]|a)|[ao]a|io)|aia|cie|oa)|on(?:oi|e)a|lonia)n|elonain|alon[ai]n)s|(?:alon(?:ain|i[ao]n)|elonian)s|oloni(?:ans?|ns)|alon(?:ain|i[ao]n)|elonian)|(?:(?:(?:aloni[ci]a|allonia|alonio)|aloni)|elonai)ns|(?:[ao]|e)lonians|(?:[ao]|e)lonian)|\s*Thes(?:s(?:(?:al(?:on(?:i(?:c(?:i[ae]|a)|[ao]a|io)|aia|cie|oa)|on(?:oi|e)a|lonia)n|elonain|alon[ai]n)s|(?:alon(?:ain|i[ao]n)|elonian)s|oloni(?:ans?|ns)|alon(?:ain|i[ao]n)|elonian)|(?:(?:(?:aloni[ci]a|allonia|alonio)|aloni)|elonai)ns|(?:[ao]|e)lonians|(?:[ao]|e)lonian))|I(?:\.\s*Thes(?:s(?:(?:al(?:on(?:i(?:c(?:i[ae]|a)|[ao]a|io)|aia|cie|oa)|on(?:oi|e)a|lonia)n|elonain|alon[ai]n)s|(?:alon(?:ain|i[ao]n)|elonian)s|oloni(?:ans?|ns)|alon(?:ain|i[ao]n)|elonian)|(?:(?:(?:aloni[ci]a|allonia|alonio)|aloni)|elonai)ns|(?:[ao]|e)lonians|(?:[ao]|e)lonian)|\s*Thes(?:s(?:(?:al(?:on(?:i(?:c(?:i[ae]|a)|[ao]a|io)|aia|cie|oa)|on(?:oi|e)a|lonia)n|elonain|alon[ai]n)s|(?:alon(?:ain|i[ao]n)|elonian)s|oloni(?:ans?|ns)|alon(?:ain|i[ao]n)|elonian)|(?:(?:(?:aloni[ci]a|allonia|alonio)|aloni)|elonai)ns|(?:[ao]|e)lonians|(?:[ao]|e)lonian))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
-				osis: ["2Tim"],
+				osis: ["2Thess"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second\s*T(?:himothy|imoth?y|himoty|omothy|i(?:m(?:oth)?)?|m)|(?:2(?:nd)?|II)\.\s*T(?:himothy|imoth?y|himoty|omothy|i(?:m(?:oth)?)?|m)|(?:2(?:nd)?|II)\s*T(?:himothy|imoth?y|himoty|omothy|i(?:m(?:oth)?)?|m)|2Tim))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second(?:\.\s*Thes(?:s(?:(?:al(?:on(?:i(?:c(?:i[ae]|a)|[ao]a|io)|aia|cie|oa)|on(?:oi|e)a|lonia)n|elonain|alon[ai]n)s|(?:alon(?:ain|i[ao]n)|elonian)s|oloni(?:ans?|ns)|alon(?:ain|i[ao]n)|elonian)|(?:(?:(?:aloni[ci]a|allonia|alonio)|aloni)|elonai)ns|(?:[ao]|e)lonians|(?:[ao]|e)lonian)|\s*Thes(?:s(?:(?:al(?:on(?:i(?:c(?:i[ae]|a)|[ao]a|io)|aia|cie|oa)|on(?:oi|e)a|lonia)n|elonain|alon[ai]n)s|(?:alon(?:ain|i[ao]n)|elonian)s|oloni(?:ans?|ns)|alon(?:ain|i[ao]n)|elonian)|(?:(?:(?:aloni[ci]a|allonia|alonio)|aloni)|elonai)ns|(?:[ao]|e)lonians|(?:[ao]|e)lonian))|2nd(?:\.\s*Thes(?:s(?:(?:al(?:on(?:i(?:c(?:i[ae]|a)|[ao]a|io)|aia|cie|oa)|on(?:oi|e)a|lonia)n|elonain|alon[ai]n)s|(?:alon(?:ain|i[ao]n)|elonian)s|oloni(?:ans?|ns)|alon(?:ain|i[ao]n)|elonian)|(?:(?:(?:aloni[ci]a|allonia|alonio)|aloni)|elonai)ns|(?:[ao]|e)lonians|(?:[ao]|e)lonian)|\s*Thes(?:s(?:(?:al(?:on(?:i(?:c(?:i[ae]|a)|[ao]a|io)|aia|cie|oa)|on(?:oi|e)a|lonia)n|elonain|alon[ai]n)s|(?:alon(?:ain|i[ao]n)|elonian)s|oloni(?:ans?|ns)|alon(?:ain|i[ao]n)|elonian)|(?:(?:(?:aloni[ci]a|allonia|alonio)|aloni)|elonai)ns|(?:[ao]|e)lonians|(?:[ao]|e)lonian))|II(?:\.\s*Thes(?:s(?:(?:al(?:on(?:i(?:c(?:i[ae]|a)|[ao]a|io)|aia|cie|oa)|on(?:oi|e)a|lonia)n|elonain|alon[ai]n)s|(?:alon(?:ain|i[ao]n)|elonian)s|oloni(?:ans?|ns)|alon(?:ain|i[ao]n)|elonian)|(?:(?:(?:aloni[ci]a|allonia|alonio)|aloni)|elonai)ns|(?:[ao]|e)lonians|(?:[ao]|e)lonian)|\s*Thes(?:s(?:(?:al(?:on(?:i(?:c(?:i[ae]|a)|[ao]a|io)|aia|cie|oa)|on(?:oi|e)a|lonia)n|elonain|alon[ai]n)s|(?:alon(?:ain|i[ao]n)|elonian)s|oloni(?:ans?|ns)|alon(?:ain|i[ao]n)|elonian)|(?:(?:(?:aloni[ci]a|allonia|alonio)|aloni)|elonai)ns|(?:[ao]|e)lonians|(?:[ao]|e)lonian))|2(?:\.\s*Thes(?:s(?:(?:al(?:on(?:i(?:c(?:i[ae]|a)|[ao]a|io)|aia|cie|oa)|on(?:oi|e)a|lonia)n|elonain|alon[ai]n)s|(?:alon(?:ain|i[ao]n)|elonian)s|oloni(?:ans?|ns)|alon(?:ain|i[ao]n)|elonian)|(?:(?:(?:aloni[ci]a|allonia|alonio)|aloni)|elonai)ns|(?:[ao]|e)lonians|(?:[ao]|e)lonian)|\s*Thes(?:s(?:(?:al(?:on(?:i(?:c(?:i[ae]|a)|[ao]a|io)|aia|cie|oa)|on(?:oi|e)a|lonia)n|elonain|alon[ai]n)s|(?:alon(?:ain|i[ao]n)|elonian)s|oloni(?:ans?|ns)|alon(?:ain|i[ao]n)|elonian)|(?:(?:(?:aloni[ci]a|allonia|alonio)|aloni)|elonai)ns|(?:[ao]|e)lonians|(?:[ao]|e)lonian))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Thess"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(Thes(?:s(?:(?:al(?:on(?:i(?:c(?:i[ae]|a)|[ao]a|io)|aia|cie|oa)|on(?:oi|e)a|lonia)n|elonain|alon[ai]n)s|(?:alon(?:ain|i[ao]n)|elonian)s|oloni(?:ans?|ns)|alon(?:ain|i[ao]n)|elonian)|(?:(?:(?:aloni[ci]a|allonia|alonio)|aloni)|elonai)ns|(?:[ao]|e)lonians|(?:[ao]|e)lonian))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Thess"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First(?:\.\s*Th(?:es(?:s(?:aloniens|s)?)?|sss|ss?)?|\s*Th(?:es(?:s(?:aloniens|s)?)?|sss|ss?)?)|1st(?:\.\s*Th(?:es(?:s(?:aloniens|s)?)?|sss|ss?)?|\s*Th(?:es(?:s(?:aloniens|s)?)?|sss|ss?)?)|1(?:\.\s*Th(?:es(?:s(?:aloniens|s)?)?|sss|ss?)?|\s*Th(?:es(?:s(?:aloniens|s)?)?|sss|ss?)?)|I(?:\.\s*Th(?:es(?:s(?:aloniens|s)?)?|sss|ss?)?|\s*Th(?:es(?:s(?:aloniens|s)?)?|sss|ss?)?)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Thess"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second(?:\.\s*Th(?:es(?:s(?:aloniens|s)?)?|sss|ss?)?|\s*Th(?:es(?:s(?:aloniens|s)?)?|sss|ss?)?)|2nd(?:\.\s*Th(?:es(?:s(?:aloniens|s)?)?|sss|ss?)?|\s*Th(?:es(?:s(?:aloniens|s)?)?|sss|ss?)?)|II(?:\.\s*Th(?:es(?:s(?:aloniens|s)?)?|sss|ss?)?|\s*Th(?:es(?:s(?:aloniens|s)?)?|sss|ss?)?)|2(?:\.\s*Th(?:es(?:s(?:aloniens|s)?)?|sss|ss?)?|\s*Th(?:es(?:s(?:aloniens|s)?)?|sss|ss?)?)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Thess"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(2(?:\s*Th(?:essalonians|(?:ess)?)|Thess))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Thess"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(1(?:\s*Th(?:essalonians|(?:ess)?)|Thess))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["1Tim"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First\s*T(?:himothy|imoth?y|himoty|omothy|i(?:m(?:oth)?)?|m)|(?:(?:1st|I)|1)\.\s*T(?:himothy|imoth?y|himoty|omothy|i(?:m(?:oth)?)?|m)|(?:(?:1st|I)|1)\s*T(?:himothy|imoth?y|himoty|omothy|i(?:m(?:oth)?)?|m)|Timothy|Timoth|1Tim))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First(?:\.\s*Timothy?|\s*Timothy?)|1st(?:\.\s*Timothy?|\s*Timothy?)|1(?:\.\s*Timothy?|\s*Timothy?)|I(?:\.\s*Timothy?|\s*Timothy?)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Tim"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second(?:\.\s*Timothy?|\s*Timothy?)|2nd(?:\.\s*Timothy?|\s*Timothy?)|II(?:\.\s*Timothy?|\s*Timothy?)|2(?:\.\s*Timothy?|\s*Timothy?)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Tim"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(Timothy?)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Tim"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First(?:\.\s*T(?:(?:himoth|imot)y|himoty|omothy|im|m)|\s*T(?:(?:himoth|imot)y|himoty|omothy|im|m))|1st(?:\.\s*T(?:(?:himoth|imot)y|himoty|omothy|im|m)|\s*T(?:(?:himoth|imot)y|himoty|omothy|im|m))|1(?:\.\s*T(?:(?:himoth|imot)y|himoty|omothy|im|m)|\s*T(?:(?:himoth|imot)y|himoty|omothy|im|m))|I(?:\.\s*T(?:(?:himoth|imot)y|himoty|omothy|im|m)|\s*T(?:(?:himoth|imot)y|himoty|omothy|im|m))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Tim"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second(?:\.\s*T(?:(?:himoth|imot)y|himoty|omothy|im|m)|\s*T(?:(?:himoth|imot)y|himoty|omothy|im|m))|2nd(?:\.\s*T(?:(?:himoth|imot)y|himoty|omothy|im|m)|\s*T(?:(?:himoth|imot)y|himoty|omothy|im|m))|II(?:\.\s*T(?:(?:himoth|imot)y|himoty|omothy|im|m)|\s*T(?:(?:himoth|imot)y|himoty|omothy|im|m))|2(?:\.\s*T(?:(?:himoth|imot)y|himoty|omothy|im|m)|\s*T(?:(?:himoth|imot)y|himoty|omothy|im|m))))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Tim"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(2(?:\s*Ti(?:mothy|m?)|Tim))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Tim"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(1(?:\s*Ti(?:mothy|m?)|Tim))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Tim"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First\.?\s*Ti|1st\.?\s*Ti|1\.?\s*Ti|I\.?\s*Ti))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Tim"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second\.?\s*Ti|2nd\.?\s*Ti|II\.?\s*Ti|2\.?\s*Ti))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Titus"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}]))(Ti(?:t(?:us)?)?)(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Ti)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["Titus"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}]))(Tit(?:us)?)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Phlm"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}]))(Ph(?:ile(?:m(?:on)?)?|l[ei]mon|l?mn|l?m))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Ph(?:ile(?:m(?:on)?)?|l[ei]mon|l?mn|l?m))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Heb"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}]))(H(?:e[ew]breww?s|w(?:[ew]breww?s|breww?s)|eb(?:r(?:(?:eww|we)|rw)|e(?:rw|w[erw])|w(?:er|re))s|eb(?:r(?:ew?s|ws|s)|(?:rew)?)|breww?s))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(H(?:e[ew]breww?s|w(?:[ew]breww?s|breww?s)|eb(?:r(?:(?:eww|we)|rw)|e(?:rw|w[erw])|w(?:er|re))s|eb(?:r(?:ew?s|ws|s)|(?:rew)?)|breww?s))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Jas"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}]))(J(?:(?:ame|m)s?|a(?:m?|s)))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
-			},
-			{
-				osis: ["2Pet"],
-				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second\s*P(?:(?:ete|t)r?|et?r|et?)?|(?:2(?:nd)?|II)\.\s*P(?:(?:ete|t)r?|et?r|et?)?|(?:2(?:nd)?|II)\s*P(?:(?:ete|t)r?|et?r|et?)?|2Pet))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(J(?:(?:ame|m)s?|a(?:m?|s)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["1Pet"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First\s*P(?:(?:ete|t)r?|et?r|et?)?|(?:(?:1st|I)|1)\.\s*P(?:(?:ete|t)r?|et?r|et?)?|(?:(?:1st|I)|1)\s*P(?:(?:ete|t)r?|et?r|et?)?|Peter|1Pet))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First\.?\s*Peter|1st\.?\s*Peter|1\.?\s*Peter|I\.?\s*Peter))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Pet"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second\.?\s*Peter|2nd\.?\s*Peter|II\.?\s*Peter|2\.?\s*Peter))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Pet"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(Peter)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Pet"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First(?:\.\s*P(?:e(?:t[er]|r)|et?|tr?)?|\s*P(?:e(?:t[er]|r)|et?|tr?)?)|1st(?:\.\s*P(?:e(?:t[er]|r)|et?|tr?)?|\s*P(?:e(?:t[er]|r)|et?|tr?)?)|1(?:\.\s*P(?:e(?:t[er]|r)|et?|tr?)?|\s*P(?:e(?:t[er]|r)|et?|tr?)?)|I(?:\.\s*P(?:e(?:t[er]|r)|et?|tr?)?|\s*P(?:e(?:t[er]|r)|et?|tr?)?)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Pet"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second(?:\.\s*P(?:e(?:t[er]|r)|et?|tr?)?|\s*P(?:e(?:t[er]|r)|et?|tr?)?)|2nd(?:\.\s*P(?:e(?:t[er]|r)|et?|tr?)?|\s*P(?:e(?:t[er]|r)|et?|tr?)?)|II(?:\.\s*P(?:e(?:t[er]|r)|et?|tr?)?|\s*P(?:e(?:t[er]|r)|et?|tr?)?)|2(?:\.\s*P(?:e(?:t[er]|r)|et?|tr?)?|\s*P(?:e(?:t[er]|r)|et?|tr?)?)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Pet"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(2(?:\s*P(?:(?:eter|t)|et)|Pet))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Pet"],
+				testament: "n",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(1(?:\s*P(?:(?:eter|t)|et)|Pet))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Jude"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}]))(Ju?de)(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Ju?de)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Tob"],
 				testament: "a",
-				regexp: /(?:^|(?<=[^\p{L}]))(T(?:ob(?:i(?:as|t)|i|t)?|b))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(T(?:ob(?:i(?:as|t)|i|t)?|b))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Jdt"],
 				testament: "a",
-				regexp: /(?:^|(?<=[^\p{L}]))(J(?:ud(?:ith?|th?)|d(?:ith?|th?)))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(J(?:ud(?:ith?|th?)|d(?:ith?|th?)|th))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Bar"],
 				testament: "a",
-				regexp: /(?:^|(?<=[^\p{L}]))(B(?:ar(?:uch)?|r))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(B(?:ar(?:uch)?|r))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Sus"],
 				testament: "a",
-				regexp: /(?:^|(?<=[^\p{L}]))(S(?:us(?:annah|(?:anna)?)|hoshana))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
-			},
-			{
-				osis: ["2Macc"],
-				testament: "a",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second\s*Mac(?:c(?:cabbbe|abe(?:ee?s|s))|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabe(?:ee?)?|c(?:ca|ab)bbe|cc?)?|(?:2(?:nd)?|II)\.\s*Mac(?:c(?:cabbbe|abe(?:ee?s|s))|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabe(?:ee?)?|c(?:ca|ab)bbe|cc?)?|(?:2nd|II)\s*Mac(?:c(?:cabbbe|abe(?:ee?s|s))|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabe(?:ee?)?|c(?:ca|ab)bbe|cc?)?|2(?:\s*Mac(?:c(?:cabbbe|abe(?:ee?s|s))|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabe(?:ee?)?|c(?:ca|ab)bbe|cc?)?|(?:(?:Mac|\s*M)c|\s*Ma))))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
-			},
-			{
-				osis: ["3Macc"],
-				testament: "a",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Third\s*Mac(?:c(?:cabbbe|abe(?:ee?s|s))|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabe(?:ee?)?|c(?:ca|ab)bbe|cc?)?|(?:3(?:rd)?|III)\.\s*Mac(?:c(?:cabbbe|abe(?:ee?s|s))|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabe(?:ee?)?|c(?:ca|ab)bbe|cc?)?|(?:3rd|III)\s*Mac(?:c(?:cabbbe|abe(?:ee?s|s))|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabe(?:ee?)?|c(?:ca|ab)bbe|cc?)?|3(?:\s*Mac(?:c(?:cabbbe|abe(?:ee?s|s))|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabe(?:ee?)?|c(?:ca|ab)bbe|cc?)?|(?:Mac|\s*M)c)))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
-			},
-			{
-				osis: ["4Macc"],
-				testament: "a",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Fourth\s*Mac(?:c(?:cabbbe|abe(?:ee?s|s))|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabe(?:ee?)?|c(?:ca|ab)bbe|cc?)?|(?:4(?:th)?|IV)\.\s*Mac(?:c(?:cabbbe|abe(?:ee?s|s))|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabe(?:ee?)?|c(?:ca|ab)bbe|cc?)?|(?:4th|IV)\s*Mac(?:c(?:cabbbe|abe(?:ee?s|s))|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabe(?:ee?)?|c(?:ca|ab)bbe|cc?)?|4(?:\s*Mac(?:c(?:cabbbe|abe(?:ee?s|s))|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabe(?:ee?)?|c(?:ca|ab)bbe|cc?)?|(?:Mac|\s*M)c)))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(S(?:us(?:annah|(?:anna)?)|hoshana))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["1Macc"],
 				testament: "a",
-				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First\s*Mac(?:c(?:cabbbe|abe(?:ee?s|s))|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|s)|ab(?:b(?:e(?:ee?s|s)|be(?:e[es]|s))|e(?:ee?s|s)))|First\s*Mac(?:cabe(?:ee?)?|c(?:ca|ab)bbe|c(?:ca|ab)bee?|ab(?:b(?:e(?:ee?)?|bee?)|e(?:ee?)?)|cc?)?|(?:(?:1st|I)|1)\.\s*Mac(?:c(?:cabbbe|abe(?:ee?s|s))|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|s)|ab(?:b(?:e(?:ee?s|s)|be(?:e[es]|s))|e(?:ee?s|s)))|(?:(?:1st|I)|1)\.\s*Mac(?:cabe(?:ee?)?|c(?:ca|ab)bbe|c(?:ca|ab)bee?|ab(?:b(?:e(?:ee?)?|bee?)|e(?:ee?)?)|cc?)?|(?:1st|I)\s*Mac(?:c(?:cabbbe|abe(?:ee?s|s))|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|s)|ab(?:b(?:e(?:ee?s|s)|be(?:e[es]|s))|e(?:ee?s|s)))|(?:1st|I)\s*Mac(?:cabe(?:ee?)?|c(?:ca|ab)bbe|c(?:ca|ab)bee?|ab(?:b(?:e(?:ee?)?|bee?)|e(?:ee?)?)|cc?)?|1(?:\s*Mac(?:c(?:cabbbe|abe(?:ee?s|s))|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|s)|ab(?:b(?:e(?:ee?s|s)|be(?:e[es]|s))|e(?:ee?s|s)))|(?:Mac|\s*M)c)|1\s*Ma(?:c(?:cabe(?:ee?)?|c(?:ca|ab)bbe|c(?:ca|ab)bee?|ab(?:b(?:e(?:ee?)?|bee?)|e(?:ee?)?)|cc?)?)?|Maccabees))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First\.?\s*Maccabees|1st\.?\s*Maccabees|1\.?\s*Maccabees|I\.?\s*Maccabees))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Macc"],
+				testament: "a",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second\.?\s*Maccabees|2nd\.?\s*Maccabees|II\.?\s*Maccabees|2\.?\s*Maccabees))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["3Macc"],
+				testament: "a",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Third\.?\s*Maccabees|III\.?\s*Maccabees|3rd\.?\s*Maccabees|3\.?\s*Maccabees))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["4Macc"],
+				testament: "a",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Fourth\.?\s*Maccabees|4th\.?\s*Maccabees|IV\.?\s*Maccabees|4\.?\s*Maccabees))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Macc"],
+				testament: "a",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(Maccabees)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Macc"],
+				testament: "a",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:First(?:\.\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?|\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?)|1st(?:\.\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?|\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?)|1(?:\.\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?|\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?)|I(?:\.\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?|\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Macc"],
+				testament: "a",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Second(?:\.\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?|\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?)|2nd(?:\.\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?|\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?)|II(?:\.\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?|\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?)|2(?:\.\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?|\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["3Macc"],
+				testament: "a",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Third(?:\.\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?|\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?)|III(?:\.\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?|\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?)|3rd(?:\.\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?|\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?)|3(?:\.\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?|\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["4Macc"],
+				testament: "a",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))((?:Fourth(?:\.\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?|\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?)|4th(?:\.\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?|\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?)|IV(?:\.\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?|\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?)|4(?:\.\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?|\s*Mac(?:c(?:(?:cabbbe|abes)|abeees)|c(?:ca|ab)bbe[es]|c(?:ca|ab)be(?:e[es]|e|s)?|ab(?:b(?:e(?:(?:ee?s|s)|(?:ee?)?)|be(?:e[es]|e|s)?)|e(?:(?:ee?s|s)|(?:ee?)?))|cabeee|c(?:ca|ab)bbe|c(?:abee?|c)?)?)))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["2Macc"],
+				testament: "a",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(2(?:\s*M(?:(?:accabees|c)|a(?:cc)?)|Macc))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["3Macc"],
+				testament: "a",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(3(?:\s*M(?:(?:accabees|c)|acc)|Macc))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["4Macc"],
+				testament: "a",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(4(?:\s*M(?:(?:accabees|c)|acc)|Macc))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
+			},
+			{
+				osis: ["1Macc"],
+				testament: "a",
+				regexp: /(?:^|(?<=[^\p{L}\p{N}])(?<!\d:(?=\d)))(1(?:\s*M(?:(?:accabees|c)|a(?:cc)?)|Macc))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Ezek", "Ezra"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(Ez)(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Ez)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Hab", "Hag"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(Ha)(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Ha)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Heb", "Hab"],
-				testament: "on",
+				testament: "no",
+				regexp: /(?:^|(?<=[^\p{L}]))(Hb)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu,
 				testament_books: {
-					"Hab": "o",
-					"Heb": "n"
-				},
-				regexp: /(?:^|(?<=[^\p{L}]))(Hb)(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+					Heb: "n",
+					Hab: "o"
+				}
 			},
 			{
 				osis: [
@@ -5366,24 +5784,24 @@ var bcv_regexps$1 = class {
 					"Josh",
 					"Joel"
 				],
-				testament: "on",
+				testament: "no",
+				regexp: /(?:^|(?<=[^\p{L}]))(Jo)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu,
 				testament_books: {
-					"Job": "o",
-					"Joel": "o",
-					"John": "n",
-					"Jonah": "o",
-					"Josh": "o"
-				},
-				regexp: /(?:^|(?<=[^\p{L}]))(Jo)(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+					John: "n",
+					Jonah: "o",
+					Job: "o",
+					Josh: "o",
+					Joel: "o"
+				}
 			},
 			{
 				osis: ["Jude", "Judg"],
-				testament: "on",
+				testament: "no",
+				regexp: /(?:^|(?<=[^\p{L}]))(J(?:ud?|d))(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu,
 				testament_books: {
-					"Jude": "n",
-					"Judg": "o"
-				},
-				regexp: /(?:^|(?<=[^\p{L}]))(J(?:ud?|d))(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+					Jude: "n",
+					Judg: "o"
+				}
 			},
 			{
 				osis: [
@@ -5391,28 +5809,28 @@ var bcv_regexps$1 = class {
 					"Mark",
 					"Mal"
 				],
-				testament: "on",
+				testament: "no",
+				regexp: /(?:^|(?<=[^\p{L}]))(Ma)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu,
 				testament_books: {
-					"Mal": "o",
-					"Mark": "n",
-					"Matt": "n"
-				},
-				regexp: /(?:^|(?<=[^\p{L}]))(Ma)(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+					Matt: "n",
+					Mark: "n",
+					Mal: "o"
+				}
 			},
 			{
 				osis: ["Phil", "Phlm"],
 				testament: "n",
-				regexp: /(?:^|(?<=[^\p{L}]))(Ph)(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Ph)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			},
 			{
 				osis: ["Zeph", "Zech"],
 				testament: "o",
-				regexp: /(?:^|(?<=[^\p{L}]))(Ze)(?:(?=[\d\s.:,;\x1e\x1f&\(\)（）\[\]\/"'\*=~\-–—])|$)/giu
+				regexp: /(?:^|(?<=[^\p{L}]))(Ze)(?:(?=[\d\s\.?:,;\x1e\x1f&\(\)（）\[\]\/"’'\*=~\-–—])|$)/giu
 			}
 		];
 	}
 };
-var bcv_translations$1 = class {
+var bcv_translations = class {
 	constructor() {
 		this.aliases = {
 			asv: { system: "kjv" },
@@ -5420,7 +5838,7 @@ var bcv_translations$1 = class {
 			csb: { system: "csb" },
 			hcsb: { system: "csb" },
 			kjv: { system: "kjv" },
-			lxx: { system: "nab" },
+			lxx: { system: "vulgate" },
 			nab: { system: "nab" },
 			nabre: { system: "nab" },
 			nas: {
@@ -5449,93 +5867,93 @@ var bcv_translations$1 = class {
 			current: {},
 			default: {
 				order: {
-					"Gen": 1,
-					"Exod": 2,
-					"Lev": 3,
-					"Num": 4,
-					"Deut": 5,
-					"Josh": 6,
-					"Judg": 7,
-					"Ruth": 8,
+					Gen: 1,
+					Exod: 2,
+					Lev: 3,
+					Num: 4,
+					Deut: 5,
+					Josh: 6,
+					Judg: 7,
+					Ruth: 8,
 					"1Sam": 9,
 					"2Sam": 10,
 					"1Kgs": 11,
 					"2Kgs": 12,
 					"1Chr": 13,
 					"2Chr": 14,
-					"Ezra": 15,
-					"Neh": 16,
-					"Esth": 17,
-					"Job": 18,
-					"Ps": 19,
-					"Prov": 20,
-					"Eccl": 21,
-					"Song": 22,
-					"Isa": 23,
-					"Jer": 24,
-					"Lam": 25,
-					"Ezek": 26,
-					"Dan": 27,
-					"Hos": 28,
-					"Joel": 29,
-					"Amos": 30,
-					"Obad": 31,
-					"Jonah": 32,
-					"Mic": 33,
-					"Nah": 34,
-					"Hab": 35,
-					"Zeph": 36,
-					"Hag": 37,
-					"Zech": 38,
-					"Mal": 39,
-					"Matt": 40,
-					"Mark": 41,
-					"Luke": 42,
-					"John": 43,
-					"Acts": 44,
-					"Rom": 45,
+					Ezra: 15,
+					Neh: 16,
+					Esth: 17,
+					Job: 18,
+					Ps: 19,
+					Prov: 20,
+					Eccl: 21,
+					Song: 22,
+					Isa: 23,
+					Jer: 24,
+					Lam: 25,
+					Ezek: 26,
+					Dan: 27,
+					Hos: 28,
+					Joel: 29,
+					Amos: 30,
+					Obad: 31,
+					Jonah: 32,
+					Mic: 33,
+					Nah: 34,
+					Hab: 35,
+					Zeph: 36,
+					Hag: 37,
+					Zech: 38,
+					Mal: 39,
+					Matt: 40,
+					Mark: 41,
+					Luke: 42,
+					John: 43,
+					Acts: 44,
+					Rom: 45,
 					"1Cor": 46,
 					"2Cor": 47,
-					"Gal": 48,
-					"Eph": 49,
-					"Phil": 50,
-					"Col": 51,
+					Gal: 48,
+					Eph: 49,
+					Phil: 50,
+					Col: 51,
 					"1Thess": 52,
 					"2Thess": 53,
 					"1Tim": 54,
 					"2Tim": 55,
-					"Titus": 56,
-					"Phlm": 57,
-					"Heb": 58,
-					"Jas": 59,
+					Titus: 56,
+					Phlm: 57,
+					Heb: 58,
+					Jas: 59,
 					"1Pet": 60,
 					"2Pet": 61,
 					"1John": 62,
 					"2John": 63,
 					"3John": 64,
-					"Jude": 65,
-					"Rev": 66,
-					"Tob": 67,
-					"Jdt": 68,
-					"GkEsth": 69,
-					"Wis": 70,
-					"Sir": 71,
-					"Bar": 72,
-					"PrAzar": 73,
-					"Sus": 74,
-					"Bel": 75,
-					"SgThree": 76,
-					"EpJer": 77,
+					Jude: 65,
+					Rev: 66,
+					Tob: 67,
+					Jdt: 68,
+					GkEsth: 69,
+					Wis: 70,
+					Sir: 71,
+					Bar: 72,
+					PrAzar: 73,
+					Sus: 74,
+					Bel: 75,
+					SgThree: 76,
+					EpJer: 77,
 					"1Macc": 78,
 					"2Macc": 79,
 					"3Macc": 80,
 					"4Macc": 81,
 					"1Esd": 82,
 					"2Esd": 83,
-					"PrMan": 84
+					PrMan: 84
 				},
 				chapters: {
-					"Gen": [
+					Gen: [
 						31,
 						25,
 						24,
@@ -5587,7 +6005,7 @@ var bcv_translations$1 = class {
 						33,
 						26
 					],
-					"Exod": [
+					Exod: [
 						22,
 						25,
 						22,
@@ -5629,7 +6047,7 @@ var bcv_translations$1 = class {
 						43,
 						38
 					],
-					"Lev": [
+					Lev: [
 						17,
 						16,
 						17,
@@ -5658,7 +6076,7 @@ var bcv_translations$1 = class {
 						46,
 						34
 					],
-					"Num": [
+					Num: [
 						54,
 						34,
 						51,
@@ -5696,7 +6114,7 @@ var bcv_translations$1 = class {
 						34,
 						13
 					],
-					"Deut": [
+					Deut: [
 						46,
 						37,
 						29,
@@ -5732,7 +6150,7 @@ var bcv_translations$1 = class {
 						29,
 						12
 					],
-					"Josh": [
+					Josh: [
 						18,
 						24,
 						17,
@@ -5758,7 +6176,7 @@ var bcv_translations$1 = class {
 						16,
 						33
 					],
-					"Judg": [
+					Judg: [
 						36,
 						23,
 						31,
@@ -5781,7 +6199,7 @@ var bcv_translations$1 = class {
 						48,
 						25
 					],
-					"Ruth": [
+					Ruth: [
 						22,
 						23,
 						18,
@@ -5966,7 +6384,7 @@ var bcv_translations$1 = class {
 						27,
 						23
 					],
-					"Ezra": [
+					Ezra: [
 						11,
 						70,
 						13,
@@ -5978,7 +6396,7 @@ var bcv_translations$1 = class {
 						15,
 						44
 					],
-					"Neh": [
+					Neh: [
 						11,
 						20,
 						32,
@@ -5993,7 +6411,7 @@ var bcv_translations$1 = class {
 						47,
 						31
 					],
-					"Esth": [
+					Esth: [
 						22,
 						23,
 						15,
@@ -6005,7 +6423,7 @@ var bcv_translations$1 = class {
 						32,
 						3
 					],
-					"Job": [
+					Job: [
 						22,
 						13,
 						26,
@@ -6049,7 +6467,7 @@ var bcv_translations$1 = class {
 						34,
 						17
 					],
-					"Ps": [
+					Ps: [
 						6,
 						12,
 						8,
@@ -6201,7 +6619,7 @@ var bcv_translations$1 = class {
 						9,
 						6
 					],
-					"Prov": [
+					Prov: [
 						33,
 						22,
 						35,
@@ -6234,7 +6652,7 @@ var bcv_translations$1 = class {
 						33,
 						31
 					],
-					"Eccl": [
+					Eccl: [
 						18,
 						26,
 						22,
@@ -6248,7 +6666,7 @@ var bcv_translations$1 = class {
 						10,
 						14
 					],
-					"Song": [
+					Song: [
 						17,
 						17,
 						11,
@@ -6258,7 +6676,7 @@ var bcv_translations$1 = class {
 						13,
 						14
 					],
-					"Isa": [
+					Isa: [
 						31,
 						22,
 						26,
@@ -6326,7 +6744,7 @@ var bcv_translations$1 = class {
 						25,
 						24
 					],
-					"Jer": [
+					Jer: [
 						19,
 						37,
 						25,
@@ -6380,14 +6798,14 @@ var bcv_translations$1 = class {
 						64,
 						34
 					],
-					"Lam": [
+					Lam: [
 						22,
 						22,
 						66,
 						22,
 						22
 					],
-					"Ezek": [
+					Ezek: [
 						28,
 						10,
 						27,
@@ -6437,7 +6855,7 @@ var bcv_translations$1 = class {
 						23,
 						35
 					],
-					"Dan": [
+					Dan: [
 						21,
 						49,
 						30,
@@ -6451,7 +6869,7 @@ var bcv_translations$1 = class {
 						45,
 						13
 					],
-					"Hos": [
+					Hos: [
 						11,
 						23,
 						5,
@@ -6467,12 +6885,12 @@ var bcv_translations$1 = class {
 						16,
 						9
 					],
-					"Joel": [
+					Joel: [
 						20,
 						32,
 						21
 					],
-					"Amos": [
+					Amos: [
 						15,
 						16,
 						15,
@@ -6483,14 +6901,14 @@ var bcv_translations$1 = class {
 						14,
 						15
 					],
-					"Obad": [21],
-					"Jonah": [
+					Obad: [21],
+					Jonah: [
 						17,
 						10,
 						10,
 						11
 					],
-					"Mic": [
+					Mic: [
 						16,
 						13,
 						12,
@@ -6499,23 +6917,23 @@ var bcv_translations$1 = class {
 						16,
 						20
 					],
-					"Nah": [
+					Nah: [
 						15,
 						13,
 						19
 					],
-					"Hab": [
+					Hab: [
 						17,
 						20,
 						19
 					],
-					"Zeph": [
+					Zeph: [
 						18,
 						15,
 						20
 					],
-					"Hag": [15, 23],
-					"Zech": [
+					Hag: [15, 23],
+					Zech: [
 						21,
 						13,
 						10,
@@ -6531,13 +6949,13 @@ var bcv_translations$1 = class {
 						9,
 						21
 					],
-					"Mal": [
+					Mal: [
 						14,
 						17,
 						18,
 						6
 					],
-					"Matt": [
+					Matt: [
 						25,
 						23,
 						17,
@@ -6567,7 +6985,7 @@ var bcv_translations$1 = class {
 						66,
 						20
 					],
-					"Mark": [
+					Mark: [
 						45,
 						28,
 						35,
@@ -6585,7 +7003,7 @@ var bcv_translations$1 = class {
 						47,
 						20
 					],
-					"Luke": [
+					Luke: [
 						80,
 						52,
 						38,
@@ -6611,7 +7029,7 @@ var bcv_translations$1 = class {
 						56,
 						53
 					],
-					"John": [
+					John: [
 						51,
 						25,
 						36,
@@ -6634,7 +7052,7 @@ var bcv_translations$1 = class {
 						31,
 						25
 					],
-					"Acts": [
+					Acts: [
 						26,
 						47,
 						26,
@@ -6664,7 +7082,7 @@ var bcv_translations$1 = class {
 						44,
 						31
 					],
-					"Rom": [
+					Rom: [
 						32,
 						29,
 						31,
@@ -6715,7 +7133,7 @@ var bcv_translations$1 = class {
 						21,
 						14
 					],
-					"Gal": [
+					Gal: [
 						24,
 						21,
 						29,
@@ -6723,7 +7141,7 @@ var bcv_translations$1 = class {
 						26,
 						18
 					],
-					"Eph": [
+					Eph: [
 						23,
 						22,
 						21,
@@ -6731,13 +7149,13 @@ var bcv_translations$1 = class {
 						33,
 						24
 					],
-					"Phil": [
+					Phil: [
 						30,
 						30,
 						21,
 						23
 					],
-					"Col": [
+					Col: [
 						29,
 						23,
 						25,
@@ -6769,13 +7187,13 @@ var bcv_translations$1 = class {
 						17,
 						22
 					],
-					"Titus": [
+					Titus: [
 						16,
 						15,
 						15
 					],
-					"Phlm": [25],
-					"Heb": [
+					Phlm: [25],
+					Heb: [
 						14,
 						18,
 						19,
@@ -6790,7 +7208,7 @@ var bcv_translations$1 = class {
 						29,
 						25
 					],
-					"Jas": [
+					Jas: [
 						27,
 						26,
 						18,
@@ -6818,8 +7236,8 @@ var bcv_translations$1 = class {
 					],
 					"2John": [13],
 					"3John": [15],
-					"Jude": [25],
-					"Rev": [
+					Jude: [25],
+					Rev: [
 						20,
 						29,
 						22,
@@ -6843,7 +7261,7 @@ var bcv_translations$1 = class {
 						27,
 						21
 					],
-					"Tob": [
+					Tob: [
 						22,
 						14,
 						17,
@@ -6859,7 +7277,7 @@ var bcv_translations$1 = class {
 						17,
 						15
 					],
-					"Jdt": [
+					Jdt: [
 						16,
 						28,
 						10,
@@ -6877,7 +7295,7 @@ var bcv_translations$1 = class {
 						14,
 						25
 					],
-					"GkEsth": [
+					GkEsth: [
 						22,
 						23,
 						15,
@@ -6895,7 +7313,7 @@ var bcv_translations$1 = class {
 						16,
 						24
 					],
-					"Wis": [
+					Wis: [
 						16,
 						24,
 						19,
@@ -6916,7 +7334,7 @@ var bcv_translations$1 = class {
 						25,
 						22
 					],
-					"Sir": [
+					Sir: [
 						30,
 						18,
 						31,
@@ -6969,18 +7387,18 @@ var bcv_translations$1 = class {
 						29,
 						30
 					],
-					"Bar": [
+					Bar: [
 						22,
 						35,
 						37,
 						37,
 						9
 					],
-					"PrAzar": [68],
-					"Sus": [64],
-					"Bel": [42],
-					"SgThree": [39],
-					"EpJer": [73],
+					PrAzar: [68],
+					Sus: [64],
+					Bel: [42],
+					SgThree: [39],
+					EpJer: [73],
 					"1Macc": [
 						64,
 						70,
@@ -7074,12 +7492,142 @@ var bcv_translations$1 = class {
 						63,
 						78
 					],
-					"PrMan": [15],
-					"Ps151": [7]
+					PrMan: [15],
+					Ps151: [7]
 				}
 			},
+			kjv: { chapters: { "3John": [14] } },
+			ceb: { chapters: {
+				"2Cor": [
+					24,
+					17,
+					18,
+					18,
+					21,
+					18,
+					16,
+					24,
+					15,
+					18,
+					33,
+					21,
+					13
+				],
+				Rev: [
+					20,
+					29,
+					22,
+					11,
+					14,
+					17,
+					17,
+					13,
+					21,
+					11,
+					19,
+					18,
+					18,
+					20,
+					8,
+					21,
+					18,
+					24,
+					21,
+					15,
+					27,
+					21
+				],
+				Tob: [
+					22,
+					14,
+					17,
+					21,
+					22,
+					18,
+					16,
+					21,
+					6,
+					13,
+					18,
+					22,
+					18,
+					15
+				],
+				PrAzar: [67],
+				EpJer: [72],
+				"1Esd": [
+					55,
+					26,
+					24,
+					63,
+					71,
+					33,
+					15,
+					92,
+					55
+				],
+				"2Esd": [
+					40,
+					48,
+					36,
+					52,
+					56,
+					59,
+					140,
+					63,
+					47,
+					60,
+					46,
+					51,
+					58,
+					48,
+					63,
+					78
+				]
+			} },
+			csb: { chapters: {
+				"2Cor": [
+					24,
+					17,
+					18,
+					18,
+					21,
+					18,
+					16,
+					24,
+					15,
+					18,
+					33,
+					21,
+					13
+				],
+				Rev: [
+					20,
+					29,
+					22,
+					11,
+					14,
+					17,
+					17,
+					13,
+					21,
+					11,
+					19,
+					18,
+					18,
+					20,
+					8,
+					21,
+					18,
+					24,
+					21,
+					15,
+					27,
+					21
+				]
+			} },
 			vulgate: { chapters: {
-				"Gen": [
+				Gen: [
 					31,
 					25,
 					24,
@@ -7131,7 +7679,7 @@ var bcv_translations$1 = class {
 					32,
 					25
 				],
-				"Exod": [
+				Exod: [
 					22,
 					25,
 					22,
@@ -7173,7 +7721,7 @@ var bcv_translations$1 = class {
 					43,
 					36
 				],
-				"Lev": [
+				Lev: [
 					17,
 					16,
 					17,
@@ -7202,7 +7750,7 @@ var bcv_translations$1 = class {
 					45,
 					34
 				],
-				"Num": [
+				Num: [
 					54,
 					34,
 					51,
@@ -7240,7 +7788,7 @@ var bcv_translations$1 = class {
 					34,
 					13
 				],
-				"Josh": [
+				Josh: [
 					18,
 					24,
 					17,
@@ -7266,7 +7814,7 @@ var bcv_translations$1 = class {
 					16,
 					33
 				],
-				"Judg": [
+				Judg: [
 					36,
 					23,
 					31,
@@ -7377,7 +7925,7 @@ var bcv_translations$1 = class {
 					21,
 					30
 				],
-				"Neh": [
+				Neh: [
 					11,
 					20,
 					31,
@@ -7392,7 +7940,7 @@ var bcv_translations$1 = class {
 					46,
 					31
 				],
-				"Job": [
+				Job: [
 					22,
 					13,
 					26,
@@ -7436,7 +7984,7 @@ var bcv_translations$1 = class {
 					25,
 					16
 				],
-				"Ps": [
+				Ps: [
 					6,
 					13,
 					9,
@@ -7588,7 +8136,7 @@ var bcv_translations$1 = class {
 					9,
 					6
 				],
-				"Eccl": [
+				Eccl: [
 					18,
 					26,
 					22,
@@ -7602,7 +8150,7 @@ var bcv_translations$1 = class {
 					10,
 					14
 				],
-				"Song": [
+				Song: [
 					16,
 					17,
 					11,
@@ -7612,7 +8160,7 @@ var bcv_translations$1 = class {
 					13,
 					14
 				],
-				"Jer": [
+				Jer: [
 					19,
 					37,
 					25,
@@ -7666,7 +8214,7 @@ var bcv_translations$1 = class {
 					64,
 					34
 				],
-				"Ezek": [
+				Ezek: [
 					28,
 					9,
 					27,
@@ -7716,7 +8264,7 @@ var bcv_translations$1 = class {
 					23,
 					35
 				],
-				"Dan": [
+				Dan: [
 					21,
 					49,
 					100,
@@ -7732,7 +8280,7 @@ var bcv_translations$1 = class {
 					65,
 					42
 				],
-				"Hos": [
+				Hos: [
 					11,
 					24,
 					5,
@@ -7748,7 +8296,7 @@ var bcv_translations$1 = class {
 					15,
 					10
 				],
-				"Amos": [
+				Amos: [
 					15,
 					16,
 					15,
@@ -7759,13 +8307,13 @@ var bcv_translations$1 = class {
 					14,
 					14
 				],
-				"Jonah": [
+				Jonah: [
 					16,
 					11,
 					10,
 					11
 				],
-				"Mic": [
+				Mic: [
 					16,
 					13,
 					12,
@@ -7774,8 +8322,8 @@ var bcv_translations$1 = class {
 					16,
 					20
 				],
-				"Hag": [14, 24],
-				"Matt": [
+				Hag: [14, 24],
+				Matt: [
 					25,
 					23,
 					17,
@@ -7805,7 +8353,7 @@ var bcv_translations$1 = class {
 					66,
 					20
 				],
-				"Mark": [
+				Mark: [
 					45,
 					28,
 					35,
@@ -7823,7 +8371,7 @@ var bcv_translations$1 = class {
 					47,
 					20
 				],
-				"John": [
+				John: [
 					51,
 					25,
 					36,
@@ -7846,7 +8394,7 @@ var bcv_translations$1 = class {
 					31,
 					25
 				],
-				"Acts": [
+				Acts: [
 					26,
 					47,
 					26,
@@ -7891,7 +8439,7 @@ var bcv_translations$1 = class {
 					21,
 					13
 				],
-				"Rev": [
+				Rev: [
 					20,
 					29,
 					22,
@@ -7915,7 +8463,7 @@ var bcv_translations$1 = class {
 					27,
 					21
 				],
-				"Tob": [
+				Tob: [
 					25,
 					23,
 					25,
@@ -7931,7 +8479,7 @@ var bcv_translations$1 = class {
 					23,
 					17
 				],
-				"Jdt": [
+				Jdt: [
 					12,
 					18,
 					15,
@@ -7949,7 +8497,7 @@ var bcv_translations$1 = class {
 					15,
 					31
 				],
-				"Wis": [
+				Wis: [
 					16,
 					25,
 					19,
@@ -7970,7 +8518,7 @@ var bcv_translations$1 = class {
 					25,
 					20
 				],
-				"Sir": [
+				Sir: [
 					40,
 					23,
 					34,
@@ -8024,7 +8572,7 @@ var bcv_translations$1 = class {
 					38,
 					13
 				],
-				"Bar": [
+				Bar: [
 					22,
 					35,
 					38,
@@ -8068,225 +8616,95 @@ var bcv_translations$1 = class {
 					40
 				]
 			} },
-			ceb: { chapters: {
-				"2Cor": [
-					24,
-					17,
-					18,
-					18,
-					21,
-					18,
-					16,
-					24,
-					15,
-					18,
-					33,
-					21,
-					13
-				],
-				"Rev": [
-					20,
-					29,
-					22,
-					11,
-					14,
-					17,
-					17,
-					13,
-					21,
-					11,
-					19,
-					18,
-					18,
-					20,
-					8,
-					21,
-					18,
-					24,
-					21,
-					15,
-					27,
-					21
-				],
-				"Tob": [
-					22,
-					14,
-					17,
-					21,
-					22,
-					18,
-					16,
-					21,
-					6,
-					13,
-					18,
-					22,
-					18,
-					15
-				],
-				"PrAzar": [67],
-				"EpJer": [72],
-				"1Esd": [
-					55,
-					26,
-					24,
-					63,
-					71,
-					33,
-					15,
-					92,
-					55
-				],
-				"2Esd": [
-					40,
-					48,
-					36,
-					52,
-					56,
-					59,
-					140,
-					63,
-					47,
-					60,
-					46,
-					51,
-					58,
-					48,
-					63,
-					78
-				]
-			} },
-			csb: { chapters: {
-				"2Cor": [
-					24,
-					17,
-					18,
-					18,
-					21,
-					18,
-					16,
-					24,
-					15,
-					18,
-					33,
-					21,
-					13
-				],
-				"Rev": [
-					20,
-					29,
-					22,
-					11,
-					14,
-					17,
-					17,
-					13,
-					21,
-					11,
-					19,
-					18,
-					18,
-					20,
-					8,
-					21,
-					18,
-					24,
-					21,
-					15,
-					27,
-					21
-				]
-			} },
-			kjv: { chapters: { "3John": [14] } },
 			nab: {
 				order: {
-					"Gen": 1,
-					"Exod": 2,
-					"Lev": 3,
-					"Num": 4,
-					"Deut": 5,
-					"Josh": 6,
-					"Judg": 7,
-					"Ruth": 8,
+					Gen: 1,
+					Exod: 2,
+					Lev: 3,
+					Num: 4,
+					Deut: 5,
+					Josh: 6,
+					Judg: 7,
+					Ruth: 8,
 					"1Sam": 9,
 					"2Sam": 10,
 					"1Kgs": 11,
 					"2Kgs": 12,
 					"1Chr": 13,
 					"2Chr": 14,
-					"PrMan": 15,
-					"Ezra": 16,
-					"Neh": 17,
+					PrMan: 15,
+					Ezra: 16,
+					Neh: 17,
 					"1Esd": 18,
 					"2Esd": 19,
-					"Tob": 20,
-					"Jdt": 21,
-					"Esth": 22,
-					"GkEsth": 23,
+					Tob: 20,
+					Jdt: 21,
+					Esth: 22,
+					GkEsth: 23,
 					"1Macc": 24,
 					"2Macc": 25,
 					"3Macc": 26,
 					"4Macc": 27,
-					"Job": 28,
-					"Ps": 29,
-					"Prov": 30,
-					"Eccl": 31,
-					"Song": 32,
-					"Wis": 33,
-					"Sir": 34,
-					"Isa": 35,
-					"Jer": 36,
-					"Lam": 37,
-					"Bar": 38,
-					"EpJer": 39,
-					"Ezek": 40,
-					"Dan": 41,
-					"PrAzar": 42,
-					"Sus": 43,
-					"Bel": 44,
-					"SgThree": 45,
-					"Hos": 46,
-					"Joel": 47,
-					"Amos": 48,
-					"Obad": 49,
-					"Jonah": 50,
-					"Mic": 51,
-					"Nah": 52,
-					"Hab": 53,
-					"Zeph": 54,
-					"Hag": 55,
-					"Zech": 56,
-					"Mal": 57,
-					"Matt": 58,
-					"Mark": 59,
-					"Luke": 60,
-					"John": 61,
-					"Acts": 62,
-					"Rom": 63,
+					Job: 28,
+					Ps: 29,
+					Prov: 30,
+					Eccl: 31,
+					Song: 32,
+					Wis: 33,
+					Sir: 34,
+					Isa: 35,
+					Jer: 36,
+					Lam: 37,
+					Bar: 38,
+					EpJer: 39,
+					Ezek: 40,
+					Dan: 41,
+					PrAzar: 42,
+					Sus: 43,
+					Bel: 44,
+					SgThree: 45,
+					Hos: 46,
+					Joel: 47,
+					Amos: 48,
+					Obad: 49,
+					Jonah: 50,
+					Mic: 51,
+					Nah: 52,
+					Hab: 53,
+					Zeph: 54,
+					Hag: 55,
+					Zech: 56,
+					Mal: 57,
+					Matt: 58,
+					Mark: 59,
+					Luke: 60,
+					John: 61,
+					Acts: 62,
+					Rom: 63,
 					"1Cor": 64,
 					"2Cor": 65,
-					"Gal": 66,
-					"Eph": 67,
-					"Phil": 68,
-					"Col": 69,
+					Gal: 66,
+					Eph: 67,
+					Phil: 68,
+					Col: 69,
 					"1Thess": 70,
 					"2Thess": 71,
 					"1Tim": 72,
 					"2Tim": 73,
-					"Titus": 74,
-					"Phlm": 75,
-					"Heb": 76,
-					"Jas": 77,
+					Titus: 74,
+					Phlm: 75,
+					Heb: 76,
+					Jas: 77,
 					"1Pet": 78,
 					"2Pet": 79,
 					"1John": 80,
 					"2John": 81,
 					"3John": 82,
-					"Jude": 83,
-					"Rev": 84
+					Jude: 83,
+					Rev: 84
 				},
 				chapters: {
-					"Gen": [
+					Gen: [
 						31,
 						25,
 						24,
@@ -8338,7 +8756,7 @@ var bcv_translations$1 = class {
 						33,
 						26
 					],
-					"Exod": [
+					Exod: [
 						22,
 						25,
 						22,
@@ -8380,7 +8798,7 @@ var bcv_translations$1 = class {
 						43,
 						38
 					],
-					"Lev": [
+					Lev: [
 						17,
 						16,
 						17,
@@ -8409,7 +8827,7 @@ var bcv_translations$1 = class {
 						46,
 						34
 					],
-					"Num": [
+					Num: [
 						54,
 						34,
 						51,
@@ -8447,7 +8865,7 @@ var bcv_translations$1 = class {
 						34,
 						13
 					],
-					"Deut": [
+					Deut: [
 						46,
 						37,
 						29,
@@ -8662,7 +9080,7 @@ var bcv_translations$1 = class {
 						27,
 						23
 					],
-					"Neh": [
+					Neh: [
 						11,
 						20,
 						38,
@@ -8677,7 +9095,7 @@ var bcv_translations$1 = class {
 						47,
 						31
 					],
-					"Job": [
+					Job: [
 						22,
 						13,
 						26,
@@ -8721,7 +9139,7 @@ var bcv_translations$1 = class {
 						26,
 						17
 					],
-					"Ps": [
+					Ps: [
 						6,
 						11,
 						9,
@@ -8873,7 +9291,7 @@ var bcv_translations$1 = class {
 						9,
 						6
 					],
-					"Eccl": [
+					Eccl: [
 						18,
 						26,
 						22,
@@ -8887,7 +9305,7 @@ var bcv_translations$1 = class {
 						10,
 						14
 					],
-					"Song": [
+					Song: [
 						17,
 						17,
 						11,
@@ -8897,7 +9315,7 @@ var bcv_translations$1 = class {
 						14,
 						14
 					],
-					"Isa": [
+					Isa: [
 						31,
 						22,
 						26,
@@ -8965,7 +9383,7 @@ var bcv_translations$1 = class {
 						25,
 						24
 					],
-					"Jer": [
+					Jer: [
 						19,
 						37,
 						25,
@@ -9019,7 +9437,7 @@ var bcv_translations$1 = class {
 						64,
 						34
 					],
-					"Ezek": [
+					Ezek: [
 						28,
 						10,
 						27,
@@ -9069,7 +9487,7 @@ var bcv_translations$1 = class {
 						23,
 						35
 					],
-					"Dan": [
+					Dan: [
 						21,
 						49,
 						100,
@@ -9085,7 +9503,7 @@ var bcv_translations$1 = class {
 						64,
 						42
 					],
-					"Hos": [
+					Hos: [
 						9,
 						25,
 						5,
@@ -9101,19 +9519,19 @@ var bcv_translations$1 = class {
 						15,
 						10
 					],
-					"Joel": [
+					Joel: [
 						20,
 						27,
 						5,
 						21
 					],
-					"Jonah": [
+					Jonah: [
 						16,
 						11,
 						10,
 						11
 					],
-					"Mic": [
+					Mic: [
 						16,
 						13,
 						12,
@@ -9122,12 +9540,12 @@ var bcv_translations$1 = class {
 						16,
 						20
 					],
-					"Nah": [
+					Nah: [
 						14,
 						14,
 						19
 					],
-					"Zech": [
+					Zech: [
 						17,
 						17,
 						10,
@@ -9143,12 +9561,12 @@ var bcv_translations$1 = class {
 						9,
 						21
 					],
-					"Mal": [
+					Mal: [
 						14,
 						17,
 						24
 					],
-					"Acts": [
+					Acts: [
 						26,
 						47,
 						26,
@@ -9193,7 +9611,7 @@ var bcv_translations$1 = class {
 						21,
 						13
 					],
-					"Rev": [
+					Rev: [
 						20,
 						29,
 						22,
@@ -9217,7 +9635,7 @@ var bcv_translations$1 = class {
 						27,
 						21
 					],
-					"Tob": [
+					Tob: [
 						22,
 						14,
 						17,
@@ -9233,7 +9651,7 @@ var bcv_translations$1 = class {
 						18,
 						15
 					],
-					"Sir": [
+					Sir: [
 						30,
 						18,
 						31,
@@ -9286,7 +9704,7 @@ var bcv_translations$1 = class {
 						29,
 						30
 					],
-					"Bar": [
+					Bar: [
 						22,
 						35,
 						38,
@@ -9313,7 +9731,7 @@ var bcv_translations$1 = class {
 					]
 				}
 			},
-			nlt: { chapters: { "Rev": [
+			nlt: { chapters: { Rev: [
 				20,
 				29,
 				22,
@@ -9353,7 +9771,7 @@ var bcv_translations$1 = class {
 					21,
 					13
 				],
-				"Rev": [
+				Rev: [
 					20,
 					29,
 					22,
@@ -9394,7 +9812,7 @@ var bcv_translations$1 = class {
 					21,
 					13
 				],
-				"Rev": [
+				Rev: [
 					20,
 					29,
 					22,
@@ -9418,7 +9836,7 @@ var bcv_translations$1 = class {
 					27,
 					21
 				],
-				"Tob": [
+				Tob: [
 					22,
 					14,
 					17,
@@ -9434,15 +9852,15 @@ var bcv_translations$1 = class {
 					18,
 					15
 				],
-				"Bar": [
+				Bar: [
 					22,
 					35,
 					38,
 					37,
 					9
 				],
-				"PrAzar": [67],
-				"EpJer": [72],
+				PrAzar: [67],
+				EpJer: [72],
 				"1Esd": [
 					55,
 					25,
@@ -9460,28 +9878,28 @@ var bcv_translations$1 = class {
 	}
 };
 var bcv_grammar_options_default = {
-	ab: /^(?:[a-e])(?!\p{L})/iu,
-	and: /^(?:and|compare|cf\.?|see\s+also|also|see|&)/i,
-	c_explicit: /^[\s*]*(?:chapters|chapter|chapts\.?|chpts\.?|chapt\.?|chaps\.?|chap\.?|chp\.?|chs\.?|cha\.?|ch\.?)[\s*]*/i,
+	ab: /^(?:(?:a|b|c|d|e))(?!\p{L})/iu,
+	and: /^(?:(?:(?:(?:see(?:\s+also)?|c(?:ompare|f)|also|and)\.?\s*)|&))/i,
+	c_explicit: /^[\s*]*(?:(?:ch(?:ap(?:t(?:er)?s|s)|a(?:p(?:t(?:er)?)?)?|pts|p|s)?\.?\s*))[\s*]*/i,
 	c_sep_eu: /^\x1f\x1f\x1f/i,
 	c_sep_us: /^\x1f\x1f\x1f/i,
 	cv_sep_weak: /^(?:[\s*]*["'][\s*]*|[\s*])+/i,
 	cv_sep_eu: /^[\s*]*,+[\s*]*/i,
 	cv_sep_us: /^[\s*]*(?::+|\.(?!\s*\.\s*\.))[\s*]*/i,
-	ff: /^[\s*]*(?:ff(?![a-z0-9])|f(?![a-z0-9]))(?![\p{L}\p{N}])(?:\.(?!\s*\.))?/iu,
+	ff: /^[\s*]*(?:(?:ff?\.?\s*(?![a-z0-9])))(?![\p{L}\p{N}])(?:\.(?!\s*\.))?/iu,
 	in_book_of: /^[\s*]*(?:from|of|in)[\s*]*(?:the[\s*]*book[\s*]*of[\s*]*)?/i,
 	next: /^(?:\x1f\x1f\x1f)/i,
 	ordinal: /^(?:th|st|nd|rd)/i,
-	range: /^[\s*]*(?:[\-–—]|through|thru|to)+[\s*]*/i,
-	sequence_eu: /^(?:[;/:&\-–—~\s*]|\.(?!\s*\.\s*\.)|and|compare|cf\.?|see\s+also|also|see)+/i,
-	sequence_us: /^(?:[,;/:&\-–—~\s*]|\.(?!\s*\.\s*\.)|and|compare|cf\.?|see\s+also|also|see)+/i,
+	range: /^[\s*]*(?:[\-–—]|(?:t(?:hr(?:ough|u)|o)\.?\s*))+[\s*]*/i,
+	sequence_eu: /^(?:[;/:&\-–—~\s*]|\.(?!\s*\.\s*\.)|(?:(?:see(?:\s+also)?|c(?:ompare|f)|also|and)\.?\s*))+/i,
+	sequence_us: /^(?:[,;/:&\-–—~\s*]|\.(?!\s*\.\s*\.)|(?:(?:see(?:\s+also)?|c(?:ompare|f)|also|and)\.?\s*))+/i,
 	space: /^[\s*]+/,
-	title: /^[\s*]*(?:title)(?!\p{L})[\s*]*/iu,
-	v_explicit: /^[\s*]*(?:verses|verse|ver\.?|vss\.?|vs\.?|vv\.?|v\.?)[\s*]*(?!\p{L})/iu
+	title: /^[\s*]*(?:(?:title\.?\s*))(?!\p{L})[\s*]*/iu,
+	v_explicit: /^[\s*]*(?:(?:v(?:er(?:ses?)?|ss?|v)?\.?\s*))[\s*]*(?!\p{L})/iu
 };
-var regexps = bcv_regexps$1;
-var translations = bcv_translations$1;
-var grammar_options$1 = bcv_grammar_options_default;
+var regexps = bcv_regexps;
+var translations = bcv_translations;
+var grammar_options = bcv_grammar_options_default;
 //#endregion
 //#region src/lib/scriptureParsing/parser.ts
 const parser = new bcv_parser(en_exports);

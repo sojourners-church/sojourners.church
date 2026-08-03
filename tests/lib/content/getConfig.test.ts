@@ -33,13 +33,16 @@ describe('getConfig', () => {
 		['team', 'config:team'],
 		['theme', 'config:theme'],
 		['navigation', 'config:nav'],
-	] as const)('uses the correct collection for %s', async (filename, collection) => {
-		mockGetEntry.mockResolvedValue({ data: {} });
+	] as const)(
+		'uses the correct collection for %s',
+		async (filename, collection) => {
+			mockGetEntry.mockResolvedValue({ data: {} });
 
-		await getConfig(filename);
+			await getConfig(filename);
 
-		expect(mockGetEntry).toHaveBeenCalledWith(collection, filename);
-	});
+			expect(mockGetEntry).toHaveBeenCalledWith(collection, filename);
+		},
+	);
 
 	it('throws when the config entry is missing', async () => {
 		mockGetEntry.mockResolvedValue(undefined);

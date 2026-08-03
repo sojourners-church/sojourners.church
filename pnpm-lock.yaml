@@ -57,8 +57,8 @@ importers:
         specifier: ^0.4.0
         version: 0.4.0(@types/node@25.9.5)(supports-color@7.2.0)(typescript@6.0.3)
       bible-passage-reference-parser:
-        specifier: ^3.2.0
-        version: 3.2.0
+        specifier: ^4.0.0
+        version: 4.0.0
       bible-reference-formatter:
         specifier: ^1.0.1
         version: 1.0.1
@@ -2357,8 +2357,8 @@ packages:
     resolution: {integrity: sha512-pbnl5XzGBdrFU/wT4jqmJVPn2B6UHPBOhzMQkY/SPUPB6QtUXtmBHBIwCbXJol93mOpGMnQyP/+BB19q04xj7g==}
     engines: {node: '>=4'}
 
-  bible-passage-reference-parser@3.2.0:
-    resolution: {integrity: sha512-hQQCv+yYhYtbMFDY1QGelaSPrRSEx6nlW11GVQu1gh3EWsTXrg5s2nSWenSxWjFNHBtK8EReZO8YwFgPvN/tUQ==}
+  bible-passage-reference-parser@4.0.0:
+    resolution: {integrity: sha512-glCq4RVcvbeNMI2h+XppurZ2zyaelsI23dX1Uv+xXQ2KRjkWRpITyNHD2+qvLG8HSSWYw/71MOEa4DgsY+i1oA==}
 
   bible-reference-formatter@1.0.1:
     resolution: {integrity: sha512-ENsEDr1NtkCPT6ZAIJG9VPoxHnLgDAFhksfU9/p73h2wZYp3L6GxnwUdaHAGMyic32xMy5QPq5wweDY3Y5bmnA==}
@@ -8661,7 +8661,7 @@ snapshots:
     dependencies:
       is-windows: 1.0.2
 
-  bible-passage-reference-parser@3.2.0: {}
+  bible-passage-reference-parser@4.0.0: {}
 
   bible-reference-formatter@1.0.1: {}
 
