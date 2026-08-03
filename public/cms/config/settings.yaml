@@ -48,14 +48,14 @@ singletons:
         widget: image
         media_folder: "/public"
         public_folder: "/"
-        accept: "image/svg"
+        accept: "image/svg+xml"
         required: false
       - name: icon
         label: Icon
         widget: image
         media_folder: "/public"
         public_folder: "/"
-        accept: "image/ico"
+        accept: "image/x-icon"
         required: false
       - name: socials
         label: Social Media
