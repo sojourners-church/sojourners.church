@@ -35,13 +35,6 @@ export const init = (el: HTMLElement) => {
 		listItemEventClass: 'list-item-event',
 		listItemEventTitleClass: 'list-item-event-title',
 		listItemEventBeforeClass: 'list-item-event-before',
-		// eventSourceFailure(error) {
-		// 	console.error('Calendar failed to load. Check configuration.', error);
-		// 	calendar.destroy();
-
-		// 	el.innerHTML =
-		// 		'<p data-calendar-error class="text-destructive">Calendar is currently unavailable.</p>';
-		// },
 	});
 
 	calendar.render();

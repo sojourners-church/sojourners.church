@@ -14,6 +14,6 @@ if (ready.ok && el instanceof HTMLElement) {
 	el.innerHTML = `<p data-calendar-error class="text-destructive">Calendar is currently unavailable. Error message: ${ready.error.message}</p>`;
 	console.error('Calendar preflight failed. Check configuration.', ready.error);
 } else {
-	console.error('Calendar preflight failed. Check configuration.', ready.error);
+	console.error('Calendar element not found.');
 }
 </script>
