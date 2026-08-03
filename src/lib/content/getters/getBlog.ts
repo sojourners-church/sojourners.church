@@ -17,5 +17,5 @@ export const getTags = async () => {
 		});
 	});
 
-	return Array.from(allTags);
+	return Array.from(allTags).sort();
 };
