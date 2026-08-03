@@ -66,6 +66,15 @@ describe('parseEmbed', () => {
 		});
 	});
 
+	describe('empty or invalid', () => {
+		it('return null on an empty url', () => {
+			expect(parseEmbed('')).toBeNull();
+		});
+		it('return null on an invalid url', () => {
+			expect(parseEmbed('123zyx')).toBeNull();
+		});
+	});
+
 	describe('unsupported providers', () => {
 		it('returns null for unsupported URLs', () => {
 			expect(parseEmbed('https://vimeo.com/123456')).toBeNull();

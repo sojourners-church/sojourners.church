@@ -1,6 +1,8 @@
 import type { ProviderType } from './providers';
 
 export const parseEmbed = (url: string) => {
+	if (!parseURL(url)) return null;
+
 	const host = new URL(url).hostname;
 
 	if (host.includes('youtube.com') || host.includes('youtu.be')) {
@@ -28,4 +30,12 @@ export const parseEmbed = (url: string) => {
 	}
 
 	return null;
+};
+
+const parseURL = (url: string) => {
+	try {
+		return new URL(url);
+	} catch {
+		return null;
+	}
 };
