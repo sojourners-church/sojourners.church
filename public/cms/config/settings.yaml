@@ -2,7 +2,7 @@
 
 backend:
   name: github
-  repo: tmykkanen/astro-church-rebuild
+  repo: sojourners-church/sojourners.church
 
 media_folder: /src/assets
 # public_folder: /media
