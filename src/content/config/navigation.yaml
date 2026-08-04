@@ -3,14 +3,12 @@ navigationEntries:
     label: About Us
     children:
       - navigationEntryType: page
-        label: Page Theme Example
-        page: page-theme-example
-      - navigationEntryType: page
         label: What We Believe
         page: what-we-believe
       - navigationEntryType: feature
         label: Leadership
         featureType: team
+        customSlug: leadership
       - navigationEntryType: page
         label: Partnerships
         page: partnerships

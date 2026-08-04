@@ -2,7 +2,7 @@
 firstName: Tyler
 lastName: Mykkanen
 fullName: Tyler Mykkanen
-image: /src/assets/people/mykkanen.jpg
+image: /src/assets/people/mykkanen.webp
 position: Lead Pastor
 email: tyler.mykkanen@sojourners.church
 isGuest: false

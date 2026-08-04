@@ -1,27 +1,23 @@
 churchName:
-  name: Astro Church
+  name: Sojourners Church
   showInHeader: true
-churchDescription: Astro theme for churches.
-churchLogo:
-  image: /src/assets/site/logoipsum-379.svg
-  showInHeader: true
+churchDescription: We exist to be and make eternally joyful disciples of Jesus Christ. Sojourners is a baptistic, reformed, non-denominational church in Albert Lea, Minnesota. Join us Sundays at 10am in the Skyline Plaza!
 favicon: /favicon.svg
-icon: /favicon.ico
 socials:
   - name: Youtube
     icon: youtube
-    link: https://www.youtube.com
+    link: https://www.youtube.com/@sojournerschurch7048
     showInFooter: true
   - name: Facebook
     icon: facebook
-    link: https://www.facebook.com/
+    link: https://www.facebook.com/SojournersMN
     showInFooter: true
   - name: Spotify
     icon: spotify
-    link: https://open.spotify.com/
+    link: https://open.spotify.com/show/4XUQE1mKNoKG2r4Ovr7FoQ?si=b827e479907845b5
     showInFooter: true
   - name: Message
     icon: whatsapp
-    link: sms:+11231231234
+    link: sms:+15073919501
     tooltip: Click to send text message
     showInFooter: true

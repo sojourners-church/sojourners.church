@@ -7,12 +7,6 @@ sections:
   - name: Pastors
     description: Staff and lay pastors
     entries:
-      - michael-scarn
-      - dwight-schrute
-      - jim-halpert
-  - name: Deacons
-    description: Full of faith and the Holy Spirit
-    entries:
-      - pam-halpert
-      - andy-bernard
-      - creed-braton
+      - tyler-mykkanen
+      - charlie-olson
+      - thad-rosenberg
