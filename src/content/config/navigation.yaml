@@ -16,14 +16,17 @@ navigationEntries:
     label: Life Together
     children:
       - navigationEntryType: page
+        label: Sundays
+        page: sundays
+      - navigationEntryType: page
         label: Community Rhythms
         page: community-rhythms
-      - navigationEntryType: page
-        label: Church Membership
-        page: church-membership
       - navigationEntryType: feature
         label: Calendar
         featureType: calendar
+      - navigationEntryType: page
+        label: Church Membership
+        page: church-membership
   - navigationEntryType: feature
     label: Sermons
     featureType: sermons
