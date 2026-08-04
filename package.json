@@ -68,5 +68,19 @@
 	},
 	"lint-staged": {
 		"*.{js,jsx,ts,tsx,json,jsonc,css,astro}": "biome check --write --files-ignore-unknown=true"
+	},
+	"pnpm": {
+		"supportedArchitectures": {
+			"os": [
+				"linux"
+			],
+			"cpu": [
+				"x64"
+			],
+			"libc": [
+				"musl",
+				"glibc"
+			]
+		}
 	}
 }
