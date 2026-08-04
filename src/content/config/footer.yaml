@@ -1,16 +1,14 @@
 sections:
   - heading: Sundays at 10am
-    content: <address>123 Main Street</br>Albert Lea, MN 56007</address>
+    content: <address>1679 West Main Street<br />Skyline Plaza<br />Albert Lea, MN 56007</address>
   - heading: Contact Us
-    content: |-
-      notarealemail@example.com</br>
-      (123) 456-7899
+    content: <address><a href='mailto:hello@sojourners.church'>hello@sojourners.church</a><br />(507) 391-9501‬</address>
 subscribe:
   isActive: true
   heading: Weekly Bulletin
-  content: Subscribe below to our weekly bulletin.
+  content: Sign up to stay informed and connected to Sojourners Church weekly happenings.
 giving:
   isActive: true
-  heading: Give to Astro Church
-  content: Click below to set up a one time or recurring gift to Astro Church.
-  link: https://get.tithe.ly/
+  heading: Give to Sojourners Church
+  content: Click below to set up a one time or recurring gift to Sojourners Church.
+  link: https://give.tithe.ly/?formId=7ddcb78e-6865-11ee-90fc-1260ab546d11

@@ -1,10 +1,10 @@
 hero:
   text:
-    code: <span class='opacity-40'>Free, open-source template</span><span class='text-primary'> for building great church websites</span><span class='opacity-40'> with Astro</span>
+    code: <span class='opacity-40'>We exist to be and make</span><span class='text-primary'> eternally joyful disciples</span><span class='opacity-40'> of Jesus Christ</span>
     lang: html
-  bgImage: /src/assets/site/hero-bg.webp
+  bgImage: /src/assets/site/heroBg.webp
 cta:
   text:
-    lang: html
     code: 10 am Sundays | Click here for livestream
-  link: https://www.youtube.com/
+    lang: html
+  link: http://youtube.com/channel/UC5HBSGOC-FxOa3-ERY5X6mw/live
