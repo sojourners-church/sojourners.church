@@ -23,6 +23,7 @@ collections:
         value_field: "{{tags.*.tag}}"
         display_fields: ["{{tags.*.tag}}"]
         search_fields: ["{{tags.*.tag}}"]
+        required: false
       - name: body
         label: Body
         widget: markdown

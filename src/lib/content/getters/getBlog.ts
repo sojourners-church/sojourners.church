@@ -12,7 +12,7 @@ export const getTags = async () => {
 	const allPosts = await getCollection('blog');
 
 	allPosts.forEach((post) => {
-		post.data.tags.forEach((tag) => {
+		post.data.tags?.forEach((tag) => {
 			allTags.add(tag);
 		});
 	});
