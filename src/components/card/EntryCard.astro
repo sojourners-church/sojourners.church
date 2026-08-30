@@ -39,7 +39,7 @@ const baseUrl = navigationEntry?.customSlug || type;
 	data-tags={isSermon(entry) ? undefined : entry.data.tags?.join(',')}
 >
 	{img &&
-    <a href={`${baseUrl}/${entry.id}`} class="flex items-center justify-center">
+    <a href={`/${baseUrl}/${entry.id}`} class="flex items-center justify-center">
       <Image
         src={img}
         alt={`image for sermon series ${isSermon(entry) && entry.series.data.title}`}
